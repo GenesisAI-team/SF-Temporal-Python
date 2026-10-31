@@ -1,0 +1,88 @@
+[project]
+name = "super-factory"
+version = "0.1.0"
+description = "Software Factory orquestada con Temporal (Python) — GEN-17"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "temporalio==1.35.0",
+    "uvicorn[standard]>=0.32",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # bugbear
+    "SIM",    # simplify
+    "RUF",    # ruff-specific
+    "ASYNC",  # async issues
+    "S",      # bandit security
+]
+ignore = [
+    "S101",   # assert allowed in tests (enforced per-file below)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"scripts/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["super_factory"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "scripts"]
+warn_unreachable = true
+disallow_any_generics = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers"
+markers = [
+    "temporal: tests that require the Temporal SDK testing environment",
+    "integration: tests that require a running Temporal server (docker compose)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["super_factory"]
+omit = ["**/__init__.py"]
+parallel = true
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = false
