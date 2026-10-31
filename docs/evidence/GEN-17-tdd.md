@@ -33,6 +33,8 @@ pytest integration  → 1 passed (workflow real completado en Temporal local)
 | 41223500812 | fail (47 s) | `Namespace default is not found` (auto-setup registra el namespace de forma asíncrona) → reintento de conexión |
 | 41223738948 | fail (46 s) | `Client.connect` no valida el namespace en SDK 1.35; el fallo se movió a `start_workflow_execution` → sonda namespace-scoped con `list_workflows` |
 | **41223964791** | **pass** | `quality` 14 s + `integration` 42 s (compose + test de integración real en Linux) |
+| 41225956060 | fail (flake) | `get_system_info` con `ConnectionReset`: el servidor aún no acepta gRPC tras `--wait` → reintento ampliado a `RuntimeError` de `Client.connect` |
+| último | **pass** (ver Actions) | tras ampliar el reintento; el historial completo está en la pestaña Actions del repo |
 
 ## Protección de `main` — aplicada y verificada (31/10/2026)
 

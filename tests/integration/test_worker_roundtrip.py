@@ -45,7 +45,13 @@ async def _connect_when_namespace_ready(address: str, namespace: str) -> Client:
     deadline = time.monotonic() + _NAMESPACE_WAIT_SECONDS
     last_error: Exception | None = None
     while time.monotonic() < deadline:
-        client = await Client.connect(address, namespace=namespace)
+        try:
+            client = await Client.connect(address, namespace=namespace)
+        except (RPCError, RuntimeError) as exc:
+            # Server not accepting gRPC yet (observed in CI: ConnectionReset).
+            last_error = exc
+            await asyncio.sleep(2)
+            continue
         if await _namespace_exists(client):
             return client
         last_error = RuntimeError(f"namespace {namespace} not registered yet")
