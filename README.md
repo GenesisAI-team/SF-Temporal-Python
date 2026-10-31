@@ -4,7 +4,7 @@
 
 > **Estado:** bootstrap (GEN-17). Repositorio fundacional. La factory completa (Linear → agentes → PR) se construirá en issues posteriores (H1–H5).
 >
-> **Propiedad:** privado, uso interno de GenesisAI-team. Sin licencia de código abierto.
+> **Propiedad:** GenesisAI-team. Repositorio **público** (decisión del propietario del 31/10/2026: la protección de `main` exige repo público en el plan Free). Sin licencia de código abierto — todos los derechos reservados.
 
 ## Stack
 

@@ -34,12 +34,20 @@ pytest integration  → 1 passed (workflow real completado en Temporal local)
 | 41223738948 | fail (46 s) | `Client.connect` no valida el namespace en SDK 1.35; el fallo se movió a `start_workflow_execution` → sonda namespace-scoped con `list_workflows` |
 | **41223964791** | **pass** | `quality` 14 s + `integration` 42 s (compose + test de integración real en Linux) |
 
-## Limitación de plataforma registrada
+## Protección de `main` — aplicada y verificada (31/10/2026)
 
-Branch protection y rulesets devuelven **HTTP 403** en repos privados del plan
-Free ("Upgrade to GitHub Pro or make this repository public"). La protección de
-`main` queda **operativa** (ver AGENTS.md) a la espera de decisión del
-propietario (upgrade, repo público o guardarraíl operativo).
+Branch protection y rulesets devuelven HTTP 403 en **privados** del plan Free
+("Upgrade to GitHub Pro or make this repository public"). El propietario decidió
+hacer el repo **público**; después se aplicó y verificó la protección vía API:
+
+```json
+{"checks":["quality","integration"],"strict":true,"approvals":0,
+ "pr_required":true,"enforce_admins":true,
+ "force_pushes":false,"deletions":false}
+```
+
+Comando: `gh api --method PUT repos/GenesisAI-team/SF-Temporal-Python/branches/main/protection`.
+Verificación: `gh api .../branches/main/protection --jq ...` (salida anterior).
 
 ## Cobertura por archivo (informe real, cobertura.py branch mode)
 

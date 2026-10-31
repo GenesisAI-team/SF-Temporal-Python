@@ -60,19 +60,17 @@ uv run pytest tests/integration -m integration -v
 - Webhooks firmados y validados (H1+); idempotencia frente a duplicados.
 - Guardar evidencias reales: comandos, exit codes, salidas. No confiar en afirmaciones sin ejecución.
 
-## Protección de `main` — limitación conocida (31/10/2026)
+## Protección de `main` — resuelta (31/10/2026)
 
-En repos **privados del plan Free**, GitHub bloquea branch protection y rulesets
-(HTTP 403: "Upgrade to GitHub Pro or make this repository public"). Por tanto,
-hoy la protección de `main` es **operativa, no técnica**:
+El repositorio se hizo **público** (decisión del propietario) porque en repos
+privados del plan Free GitHub bloquea branch protection y rulesets (HTTP 403).
+Protección aplicada vía API y verificada:
 
-- Push directo a `main` prohibido por convención (el agente jamás lo hace).
-- Todo cambio entra por PR con CI verde (`quality` + `integration`).
-- Merge solo con aprobación humana explícita; sin merge automático.
-
-Pendiente (requiere decisión del propietario): upgrade de plan, hacer el repo
-público, o mantener el guardarraíl operativo. Registrar el cambio aquí cuando
-se resuelva.
+- Checks obligatorios: `quality` + `integration` (strict = rama actualizada).
+- PR obligatorio, **0 aprobaciones requeridas** (GitHub no permite autoaprobar).
+- `enforce_admins=true` (sin bypass para admins), sin force-push, sin borrado,
+  resolución de conversaciones obligatoria.
+- **El agente jamás hace merge**; el merge solo lo ejecuta un humano.
 
 ## Decisiones arquitectónicas
 
