@@ -5,7 +5,8 @@ Requires the docker compose stack (see infrastructure/docker/compose.yaml):
     uv run pytest -m integration
 
 Note: a fresh temporalio/auto-setup registers the `default` namespace
-asynchronously, so connections are retried until the namespace exists.
+asynchronously, and Client.connect does not always validate it, so we probe
+with a namespace-scoped RPC until it exists before starting the worker.
 """
 
 import asyncio
@@ -26,24 +27,37 @@ pytestmark = pytest.mark.integration
 _NAMESPACE_WAIT_SECONDS = 90
 
 
-async def _connect_when_ready(address: str, namespace: str) -> Client:
-    """Connect to Temporal, retrying while the namespace is still being created."""
+async def _namespace_exists(client: Client) -> bool:
+    """Probe the namespace with a namespace-scoped RPC (list workflows)."""
+    try:
+        await client.list_workflows(page_size=1).__anext__()
+    except StopAsyncIteration:
+        return True  # namespace exists, no workflows yet
+    except RPCError as exc:
+        if "Namespace" in str(exc):
+            return False
+        raise
+    return True
+
+
+async def _connect_when_namespace_ready(address: str, namespace: str) -> Client:
+    """Return a client whose namespace has been created by auto-setup."""
     deadline = time.monotonic() + _NAMESPACE_WAIT_SECONDS
     last_error: Exception | None = None
     while time.monotonic() < deadline:
-        try:
-            return await Client.connect(address, namespace=namespace)
-        except RPCError as exc:
-            last_error = exc
-            await asyncio.sleep(2)
-    msg = f"Temporal at {address} not ready after {_NAMESPACE_WAIT_SECONDS}s"
+        client = await Client.connect(address, namespace=namespace)
+        if await _namespace_exists(client):
+            return client
+        last_error = RuntimeError(f"namespace {namespace} not registered yet")
+        await asyncio.sleep(2)
+    msg = f"namespace {namespace} not ready after {_NAMESPACE_WAIT_SECONDS}s"
     raise RuntimeError(msg) from last_error
 
 
 async def test_worker_roundtrip_completes_workflow() -> None:
     settings = get_settings()
     # Connect first: run_worker() would die on the not-yet-created namespace.
-    client = await _connect_when_ready(
+    client = await _connect_when_namespace_ready(
         settings.temporal_address,
         settings.temporal_namespace,
     )
