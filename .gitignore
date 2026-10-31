@@ -1,0 +1,50 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# uv
+.uv-cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Coverage
+.coverage
+.coverage.*
+coverage.json
+htmlcov/
+coverage.xml
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Packaging
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Logs and ephemeral artifacts
+*.log
+logs/
+tmp/
+artifacts/
