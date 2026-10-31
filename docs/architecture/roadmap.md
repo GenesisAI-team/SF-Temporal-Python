@@ -19,3 +19,4 @@
 - GitHub App con permisos mínimos (en lugar de tokens personales).
 - Actualización del documento del protocolo en Linear para incluir TDD/cobertura/AGENTS.md (hoy viven en GEN-14/GEN-16/este repo).
 - Añadir `SF-Temporal-Python` a los repositorios vinculados del protocolo.
+- **Protección técnica de `main`**: requiere GitHub Pro (o repo público); hoy es operativa (ver AGENTS.md).

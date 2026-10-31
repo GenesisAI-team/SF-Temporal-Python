@@ -60,6 +60,20 @@ uv run pytest tests/integration -m integration -v
 - Webhooks firmados y validados (H1+); idempotencia frente a duplicados.
 - Guardar evidencias reales: comandos, exit codes, salidas. No confiar en afirmaciones sin ejecución.
 
+## Protección de `main` — limitación conocida (31/10/2026)
+
+En repos **privados del plan Free**, GitHub bloquea branch protection y rulesets
+(HTTP 403: "Upgrade to GitHub Pro or make this repository public"). Por tanto,
+hoy la protección de `main` es **operativa, no técnica**:
+
+- Push directo a `main` prohibido por convención (el agente jamás lo hace).
+- Todo cambio entra por PR con CI verde (`quality` + `integration`).
+- Merge solo con aprobación humana explícita; sin merge automático.
+
+Pendiente (requiere decisión del propietario): upgrade de plan, hacer el repo
+público, o mantener el guardarraíl operativo. Registrar el cambio aquí cuando
+se resuelva.
+
 ## Decisiones arquitectónicas
 
 Registrar toda decisión significativa en `docs/adr/` con ADR incrementado. Las decisiones ya registradas (0001–0005) son vinculantes.

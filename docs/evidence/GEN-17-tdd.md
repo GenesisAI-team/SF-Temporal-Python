@@ -25,6 +25,22 @@ check_coverage      → coverage policy OK (per-file 100/80), exit 0
 pytest integration  → 1 passed (workflow real completado en Temporal local)
 ```
 
+## Evidencia de CI (GitHub Actions, PR #1)
+
+| Run | Resultado | Motivo |
+| --- | --- | --- |
+| 41223427645 | fail (3–4 s) | `astral-sh/setup-uv@v10` no existe como tag flotante → fijado a `v10.3.3` |
+| 41223500812 | fail (47 s) | `Namespace default is not found` (auto-setup registra el namespace de forma asíncrona) → reintento de conexión |
+| 41223738948 | fail (46 s) | `Client.connect` no valida el namespace en SDK 1.35; el fallo se movió a `start_workflow_execution` → sonda namespace-scoped con `list_workflows` |
+| **41223964791** | **pass** | `quality` 14 s + `integration` 42 s (compose + test de integración real en Linux) |
+
+## Limitación de plataforma registrada
+
+Branch protection y rulesets devuelven **HTTP 403** en repos privados del plan
+Free ("Upgrade to GitHub Pro or make this repository public"). La protección de
+`main` queda **operativa** (ver AGENTS.md) a la espera de decisión del
+propietario (upgrade, repo público o guardarraíl operativo).
+
 ## Cobertura por archivo (informe real, cobertura.py branch mode)
 
 - CORE (`domain/task_spec.py`, `contracts/approved_task.py`, `temporal/workflows/smoke.py`): **100 % líneas y ramas**.
