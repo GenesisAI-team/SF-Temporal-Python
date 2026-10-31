@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: Install dependencies (frozen lockfile)
+        run: uv sync --frozen
+      - name: Lint (Ruff)
+        run: uv run ruff check .
+      - name: Type check (mypy strict)
+        run: uv run mypy src
+      - name: Unit + Temporal tests with coverage
+        run: |
+          uv run coverage run -m pytest tests/unit tests/temporal -q
+          uv run coverage combine
+          uv run coverage json -o coverage.json
+      - name: Per-file coverage policy (100/80)
+        run: uv run python -m scripts.check_coverage
+
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - name: Install dependencies (frozen lockfile)
+        run: uv sync --frozen
+      - name: Start local Temporal stack
+        run: docker compose -f infrastructure/docker/compose.yaml up -d --wait
+      - name: Integration tests against live Temporal
+        run: uv run pytest tests/integration -m integration -v
+      - name: Stop Temporal stack
+        if: always()
+        run: docker compose -f infrastructure/docker/compose.yaml down -v

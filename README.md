@@ -28,10 +28,19 @@
 
 ```bash
 uv sync --frozen        # instalar dependencias exactas de uv.lock
-uv run pytest           # tests unitarios y de Temporal
-uv run pytest -m integration   # tests de integración (requiere docker compose up)
+uv run pytest           # tests unitarios y de Temporal (time-skipping, sin Docker)
 uv run ruff check .     # lint
 uv run mypy src         # tipos
+
+# Temporal local (ver docs/runbooks/temporal.md)
+docker compose -f infrastructure/docker/compose.yaml up -d --wait   # UI en http://localhost:8233
+uv run python -m super_factory.temporal.workers.run                 # worker
+uv run pytest tests/integration -m integration -v                   # integración vs servidor real
+
+# Gates de cobertura (igual que CI)
+uv run coverage run -m pytest tests/unit tests/temporal -q
+uv run coverage combine && uv run coverage json -o coverage.json
+uv run python -m scripts.check_coverage
 ```
 
 ## Estructura
