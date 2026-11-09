@@ -217,6 +217,10 @@ async def linear_webhook(
                 allowed_repositories=criteria.allowed_repositories,
             )
         )
+    except HTTPException:
+        deduper.release(delivery_id)
+        logger.warning("linear webhook: temporal server unavailable")
+        raise
     except Exception:
         deduper.release(delivery_id)
         logger.exception("linear webhook: issue workflow dispatch failed")

@@ -53,5 +53,6 @@ tail -n 5 var/audit/events.jsonl
 | 400 stale sistemáticos | tolerancia 60 s con reloj desfasado; ampliar `SF_LINEAR_TIMESTAMP_TOLERANCE_SECONDS` |
 | 200 duplicate sin run nuevo | delivery repetido (esperado); revisar `SF_LINEAR_DEDUPE_TTL_SECONDS` |
 | 503 webhook secret not configured | falta la variable en el proceso |
+| 503 temporal server unavailable | servidor Temporal caído; levantar compose y worker |
 | 500 invalid configuration | repositorio objetivo vacío o sin formato `owner/name` |
-| 500 workflow dispatch failed | Temporal caído; levantar compose y worker |
+| 500 workflow dispatch failed | fallo inesperado del start tras conectar (verificar logs) |
