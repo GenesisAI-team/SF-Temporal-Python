@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 _SRC = "src/super_factory/"
 
@@ -68,7 +68,7 @@ def _find_entry(files: dict[str, Any], rel_path: str) -> dict[str, Any] | None:
     for key, entry in files.items():
         normalized = key.replace("\\", "/")
         if normalized.endswith(wanted):
-            return entry
+            return cast("dict[str, Any]", entry)
     return None
 
 
