@@ -28,7 +28,7 @@ pytestmark = pytest.mark.integration
 def _issue_input() -> IssueWorkflowInput:
     repo = "GenesisAI-team/SF-Temporal-Python"
     return IssueWorkflowInput(
-        issue_id=f"GEN-IT-{uuid.uuid4().int % 100000}",
+        issue_id=f"GEN-{20000 + uuid.uuid4().int % 70000}",
         repository=repo,
         issue_state="Todo",
         labels=("Feature",),
