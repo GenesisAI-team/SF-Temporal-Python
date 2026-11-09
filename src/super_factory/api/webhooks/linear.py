@@ -11,9 +11,10 @@ import asyncio
 import hashlib
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -72,18 +73,37 @@ def get_audit_sink() -> AuditSink:
 
 
 async def get_starter() -> IssueWorkflowStarter:
-    """Lazy singleton starter connected to the configured Temporal server."""
+    """Lazy singleton starter connected to the configured Temporal server.
+
+    Transport failures map to HTTP 503 so Linear retries later; the singleton
+    stays unbound and the next request re-attempts the connection.
+    """
     global _starter
     if _starter is None:
         async with _starter_lock:
             if _starter is None:
                 settings = get_settings()
-                _starter = await IssueWorkflowStarter.connect(
-                    address=settings.temporal_address,
-                    namespace=settings.temporal_namespace,
-                    task_queue=settings.temporal_task_queue,
-                )
+                try:
+                    _starter = await IssueWorkflowStarter.connect(
+                        address=settings.temporal_address,
+                        namespace=settings.temporal_namespace,
+                        task_queue=settings.temporal_task_queue,
+                    )
+                except (RuntimeError, OSError) as exc:
+                    logger.warning("temporal server unavailable: %s", type(exc).__name__)
+                    msg = "temporal server unavailable"
+                    raise HTTPException(status_code=503, detail=msg) from exc
     return _starter
+
+
+async def get_starter_resolver() -> Callable[[], Awaitable[IssueWorkflowStarter]]:
+    """Returns the lazy starter factory; resolved only when a run is needed.
+
+    Keeping the Temporal connection out of the per-request dependency graph
+    means rejected/blocked/duplicate events are processed even during a
+    Temporal outage (they are audited, then answered with 200).
+    """
+    return get_starter
 
 
 def _identifier_or_dash(value: str) -> str:
@@ -93,7 +113,7 @@ def _identifier_or_dash(value: str) -> str:
 @router.post("/webhooks/linear")
 async def linear_webhook(
     request: Request,
-    starter: IssueWorkflowStarter = Depends(get_starter),
+    starter_factory: Callable[[], Awaitable[IssueWorkflowStarter]] = Depends(get_starter_resolver),
     deduper: InMemoryDeliveryDeduper = Depends(get_deduper),
     audit: AuditSink = Depends(get_audit_sink),
     secret: str = Depends(get_webhook_secret),
@@ -182,6 +202,7 @@ async def linear_webhook(
         )
 
     try:
+        starter = await starter_factory()
         run = await starter.start_or_recover(
             IssueWorkflowInput(
                 issue_id=snapshot.issue_id,

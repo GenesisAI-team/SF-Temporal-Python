@@ -12,7 +12,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import httpx
 import pytest
@@ -22,7 +22,7 @@ from super_factory.api.app import create_app
 from super_factory.api.webhooks.linear import (
     get_audit_sink,
     get_deduper,
-    get_starter,
+    get_starter_resolver,
     get_webhook_secret,
 )
 from super_factory.contracts.workflow_io import IssueWorkflowInput, WorkflowStartResult
@@ -65,11 +65,16 @@ def _app(
     tmp_path: Path, starter: FakeStarter | None = None, *, secret: str | None = SECRET
 ) -> FastAPI:
     app = create_app()
+    fake_starter = starter or FakeStarter()
+
+    async def resolve_fake() -> Any:
+        return fake_starter
+
     app.dependency_overrides[get_webhook_secret] = lambda: secret or ""
     dedupe_store = InMemoryDeliveryDeduper(ttl_seconds=3600)
     app.dependency_overrides[get_deduper] = lambda: dedupe_store
     app.dependency_overrides[get_audit_sink] = lambda: JsonLinesAuditSink(tmp_path / "audit.jsonl")
-    app.dependency_overrides[get_starter] = lambda: cast(Any, starter or FakeStarter())
+    app.dependency_overrides[get_starter_resolver] = lambda: resolve_fake
     return app
 
 

@@ -66,3 +66,21 @@ async def test_starter_singleton_connects_exactly_once(
     assert len(connects) == 1
     assert connects[0] == ("temporal-test:7233", "default", "factory-orchestration")
     assert first is second
+
+
+async def test_starter_unavailable_maps_to_503(
+    monkeypatch: pytest.MonkeyPatch, _reset_providers
+) -> None:
+    from fastapi import HTTPException
+
+    async def failing_connect(**kwargs: str) -> IssueWorkflowStarter:
+        raise RuntimeError("Failed client connect")
+
+    monkeypatch.setattr(webhook_module.IssueWorkflowStarter, "connect", failing_connect)
+
+    with pytest.raises(HTTPException) as http_error:
+        await webhook_module.get_starter()
+    assert http_error.value.status_code == 503
+    assert "temporal" in http_error.value.detail.lower()
+    # the singleton stays unbound; a later call retries the connect
+    assert webhook_module._starter is None
