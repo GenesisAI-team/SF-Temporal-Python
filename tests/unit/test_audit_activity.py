@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from super_factory.persistence.audit import JsonLinesAuditSink
-from super_factory.temporal.activities.audit import RecordAuditInput, record_audit_activity
+from super_factory.temporal.activities.audit import (
+    RecordAuditInput,
+    get_audit_sink,
+    record_audit_activity,
+    set_audit_sink,
+)
 
 REPO = "GenesisAI-team/SF-Temporal-Python"
 
@@ -81,3 +86,30 @@ async def test_record_audit_is_idempotent_per_delivery(
     await record_audit_activity(_record())
     await record_audit_activity(_record())
     assert len(ledger.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_get_audit_sink_builds_singleton_from_settings(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    set_audit_sink(None)
+    try:
+        monkeypatch.setenv("SF_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
+        first = get_audit_sink()
+        second = get_audit_sink()
+        assert first is second
+        assert isinstance(first, JsonLinesAuditSink)
+        assert first.path == Path(tmp_path / "audit.jsonl")
+    finally:
+        set_audit_sink(None)
+
+
+def test_set_audit_sink_seam_replaces_the_sink() -> None:
+    class _StubSink:
+        pass
+
+    stub = _StubSink()
+    set_audit_sink(stub)
+    try:
+        assert get_audit_sink() is stub
+    finally:
+        set_audit_sink(None)

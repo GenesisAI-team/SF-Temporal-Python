@@ -297,6 +297,34 @@ async def test_logs_never_contain_the_secret(
     assert "another-secret" not in caplog.text
 
 
+async def test_delivery_header_preferred_and_whitespace_falls_back(
+    tmp_path: Path, h1_env: None
+) -> None:
+    starter = FakeStarter()
+    app = _app(tmp_path, starter)
+    first = await _post(app, _fresh_body(), headers={"Linear-Delivery": "d-uuid-1"})
+    second = await _post(app, _fresh_body(), headers={"Linear-Delivery": "d-uuid-1"})
+    whitespace = await _post(app, _fresh_body(), headers={"Linear-Delivery": "   "})
+    assert first.json()["status"] == "accepted"
+    assert second.json()["status"] == "duplicate"
+    assert whitespace.json()["status"] == "accepted"
+    assert len(starter.calls) == 2
+
+
+async def test_blank_identifier_blocked_with_dash_correlation(
+    tmp_path: Path, h1_env: None
+) -> None:
+    starter = FakeStarter()
+    blank = json.dumps(_payload_dict(issue_id="")).encode("utf-8")
+    response = await _post(_app(tmp_path, starter), blank)
+    body = response.json()
+    assert body["status"] == "blocked"
+    assert body["reasons"] == ["ISSUE_ID_MALFORMED"]
+    entry = _single_audit_line(tmp_path / "audit.jsonl")
+    assert entry["issue_id"] == "-"
+    assert starter.calls == []
+
+
 def _single_audit_line(path: Path) -> dict[str, Any]:
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1

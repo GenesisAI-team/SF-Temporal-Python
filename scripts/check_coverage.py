@@ -34,8 +34,14 @@ DEFAULT_POLICY: Policy = {
 
 CORE_FILES: tuple[str, ...] = (
     f"{_SRC}domain/task_spec.py",
+    f"{_SRC}domain/repository_spec.py",
+    f"{_SRC}domain/issue_selection.py",
     f"{_SRC}contracts/approved_task.py",
+    f"{_SRC}contracts/selection.py",
+    f"{_SRC}contracts/audit.py",
+    f"{_SRC}contracts/workflow_io.py",
     f"{_SRC}temporal/workflows/smoke.py",
+    f"{_SRC}temporal/workflows/issue.py",
 )
 
 IMPORTANT_FILES: tuple[str, ...] = (
@@ -43,7 +49,15 @@ IMPORTANT_FILES: tuple[str, ...] = (
     f"{_SRC}api/app.py",
     f"{_SRC}api/routes/health.py",
     f"{_SRC}api/webhooks/linear.py",
+    f"{_SRC}integrations/linear/models.py",
+    f"{_SRC}integrations/linear/signature.py",
+    f"{_SRC}integrations/linear/replay.py",
+    f"{_SRC}integrations/temporal_sdk/starter.py",
+    f"{_SRC}persistence/audit.py",
+    f"{_SRC}persistence/idempotency.py",
     f"{_SRC}temporal/activities/smoke.py",
+    f"{_SRC}temporal/activities/selection.py",
+    f"{_SRC}temporal/activities/audit.py",
     f"{_SRC}temporal/workers/factory_worker.py",
 )
 
