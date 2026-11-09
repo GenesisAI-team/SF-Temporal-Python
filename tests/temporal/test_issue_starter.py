@@ -4,18 +4,20 @@ start_or_recover guarantees create-or-recover semantics: one unique durable
 run per issue id (Temporal id reuse policy REJECT_DUPLICATE).
 """
 
+from pathlib import Path
+
 import pytest
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-pytestmark = pytest.mark.temporal
-
 from super_factory.contracts.workflow_io import IssueWorkflowInput, WorkflowStartResult
 from super_factory.integrations.temporal_sdk.starter import IssueWorkflowStarter
+from super_factory.persistence.audit import JsonLinesAuditSink
 from super_factory.temporal.activities.audit import record_audit_activity, set_audit_sink
 from super_factory.temporal.activities.selection import select_issue_activity
-from super_factory.persistence.audit import JsonLinesAuditSink
 from super_factory.temporal.workflows.issue import IssueWorkflow
+
+pytestmark = pytest.mark.temporal
 
 TASK_QUEUE = "tq-starter-tests"
 REPO = "GenesisAI-team/SF-Temporal-Python"
@@ -39,7 +41,7 @@ def _input(**overrides: object) -> IssueWorkflowInput:
 
 
 async def test_start_or_recover_creates_then_recovers_single_run(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     set_audit_sink(JsonLinesAuditSink(tmp_path / "audit.jsonl"))
     try:

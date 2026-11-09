@@ -10,7 +10,7 @@ import pytest
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from super_factory.contracts.workflow_io import IssueWorkflowInput, IssueWorkflowResult
+from super_factory.contracts.workflow_io import IssueWorkflowInput
 from super_factory.persistence.audit import JsonLinesAuditSink
 from super_factory.temporal.activities.audit import set_audit_sink
 from super_factory.temporal.workers.factory_worker import build_worker
@@ -60,14 +60,15 @@ async def test_build_worker_registers_issue_workflow(tmp_path: Path) -> None:
     ledger = JsonLinesAuditSink(tmp_path / "audit.jsonl")
     set_audit_sink(ledger)
     try:
-        async with await WorkflowEnvironment.start_time_skipping() as env:
-            async with build_worker(env.client):
-                result = await env.client.execute_workflow(
-                    IssueWorkflow.run,
-                    _issue_input(),
-                    id="issue-GEN-60",
-                    task_queue=TASK_QUEUE_ORCHESTRATION,
-                )
+        async with await WorkflowEnvironment.start_time_skipping() as env, build_worker(
+            env.client
+        ):
+            result = await env.client.execute_workflow(
+                IssueWorkflow.run,
+                _issue_input(),
+                id="issue-GEN-60",
+                task_queue=TASK_QUEUE_ORCHESTRATION,
+            )
     finally:
         set_audit_sink(None)
     assert result.workflow_state == "READY"

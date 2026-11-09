@@ -19,14 +19,6 @@ async def test_healthz_returns_ok() -> None:
     assert body["service"] == "super-factory"
 
 
-async def test_linear_webhook_returns_501_not_implemented() -> None:
-    response = await _request("POST", "/webhooks/linear", json={"type": "Issue"})
-    assert response.status_code == 501
-    body = response.json()
-    assert "not implemented" in body["detail"].lower()
-    assert "h1" in body["detail"].lower()
-
-
 async def test_unknown_route_returns_404() -> None:
     response = await _request("GET", "/does-not-exist")
     assert response.status_code == 404

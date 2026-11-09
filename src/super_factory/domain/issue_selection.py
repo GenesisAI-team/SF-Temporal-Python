@@ -44,7 +44,9 @@ class IssueSelectionResult:
 
 
 def format_blocking_reason(reason: BlockingReason) -> str:
-    """One blocking reason as the stable ``code: detail`` string."""
+    """One blocking reason as the stable ``code`` or ``code: detail`` string."""
+    if not reason.detail.strip():
+        return reason.code
     return f"{reason.code}: {reason.detail}"
 
 

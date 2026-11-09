@@ -12,6 +12,8 @@ from datetime import timedelta
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
+    from temporalio.common import RetryPolicy
+
     from super_factory.contracts.workflow_io import (
         IssueWorkflowInput,
         IssueWorkflowResult,
@@ -22,7 +24,6 @@ with workflow.unsafe.imports_passed_through():
         record_audit_activity,
     )
     from super_factory.temporal.activities.selection import select_issue_activity
-    from temporalio.common import RetryPolicy
 
 _DECISION_RETENTION = timedelta(seconds=10)
 _AUDIT_RETENTION = timedelta(seconds=30)

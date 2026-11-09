@@ -17,6 +17,7 @@ from super_factory.domain.issue_selection import (
     REASON_STATE_UNRESOLVED,
     BlockingReason,
     evaluate_issue_selection,
+    format_blocking_reason,
     format_blocking_reasons,
 )
 
@@ -120,7 +121,12 @@ def test_blocking_reason_is_immutable() -> None:
         reason.code = "Y"  # type: ignore[misc]
 
 
-def test_format_blocking_reasons_joins_code_and_detail() -> None:
+def test_format_blocking_reason_without_detail_omits_separator() -> None:
+    reason = BlockingReason(code=REASON_REPOSITORY_UNRESOLVED, detail="   ")
+    assert format_blocking_reason(reason) == REASON_REPOSITORY_UNRESOLVED
+
+
+def test_format_blocking_reason_joins_code_and_detail() -> None:
     reasons = (
         BlockingReason(code=REASON_STATE_NOT_SELECTABLE, detail="Done"),
         BlockingReason(code=REASON_REPOSITORY_NOT_ALLOWED, detail="owner/other"),

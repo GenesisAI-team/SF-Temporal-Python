@@ -143,19 +143,18 @@ async def test_transient_audit_failure_is_absorbed_by_retries() -> None:
 
 
 async def test_workflow_history_replays_deterministically(ledger: Path) -> None:
-    async with await WorkflowEnvironment.start_time_skipping() as env:
-        async with Worker(
-            env.client,
+    async with await WorkflowEnvironment.start_time_skipping() as env, Worker(
+        env.client,
+        task_queue=TASK_QUEUE,
+        workflows=[IssueWorkflow],
+        activities=[select_issue_activity, record_audit_activity],
+    ):
+        handle: WorkflowHandle = await env.client.start_workflow(
+            IssueWorkflow.run,
+            _input(issue_id="GEN-45"),
+            id="issue-GEN-45",
             task_queue=TASK_QUEUE,
-            workflows=[IssueWorkflow],
-            activities=[select_issue_activity, record_audit_activity],
-        ):
-            handle: WorkflowHandle = await env.client.start_workflow(
-                IssueWorkflow.run,
-                _input(issue_id="GEN-45"),
-                id="issue-GEN-45",
-                task_queue=TASK_QUEUE,
-            )
-            await handle.result()
-            history = await handle.fetch_history()
+        )
+        await handle.result()
+        history = await handle.fetch_history()
     await Replayer(workflows=[IssueWorkflow]).replay_workflow(history)
