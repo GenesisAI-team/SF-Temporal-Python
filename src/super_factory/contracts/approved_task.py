@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from super_factory.domain.repository_spec import is_valid_repository
 from super_factory.domain.task_spec import all_non_empty, is_non_empty, is_valid_issue_id
 
 
@@ -35,8 +36,7 @@ class ApprovedTaskSpec(BaseModel):
     @field_validator("repository")
     @classmethod
     def _check_repository(cls, value: str) -> str:
-        parts = value.split("/")
-        if len(parts) != 2 or not all(p.strip() for p in parts):
+        if not is_valid_repository(value):
             msg = "repository must be in the form owner/name"
             raise ValueError(msg)
         return value
