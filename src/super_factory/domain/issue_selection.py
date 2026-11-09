@@ -11,15 +11,12 @@ from dataclasses import dataclass
 from super_factory.domain.repository_spec import is_valid_repository
 from super_factory.domain.task_spec import is_valid_issue_id
 
-# Stable blocking-reason codes (persisted in audit records, memo and responses).
 REASON_ISSUE_ID_MALFORMED = "ISSUE_ID_MALFORMED"
 REASON_STATE_UNRESOLVED = "STATE_UNRESOLVED"
 REASON_STATE_NOT_SELECTABLE = "STATE_NOT_SELECTABLE"
 REASON_REPOSITORY_UNRESOLVED = "REPOSITORY_UNRESOLVED"
 REASON_REPOSITORY_MALFORMED = "REPOSITORY_MALFORMED"
 REASON_REPOSITORY_NOT_ALLOWED = "REPOSITORY_NOT_ALLOWED"
-
-_EMPTY_REASONS_MARKER = "-"
 
 
 @dataclass(frozen=True)
@@ -44,6 +41,16 @@ class IssueSelectionResult:
         if self.approved and self.reasons:
             msg = "approved decisions cannot carry blocking reasons"
             raise ValueError(msg)
+
+
+def format_blocking_reason(reason: BlockingReason) -> str:
+    """One blocking reason as the stable ``code: detail`` string."""
+    return f"{reason.code}: {reason.detail}"
+
+
+def format_blocking_reasons(reasons: tuple[BlockingReason, ...]) -> str:
+    """Serialize reasons for audit/memo storage: ``"code: detail; ..."``."""
+    return "; ".join(format_blocking_reason(reason) for reason in reasons)
 
 
 def evaluate_issue_selection(
@@ -84,10 +91,3 @@ def evaluate_issue_selection(
         )
 
     return IssueSelectionResult(approved=not reasons, reasons=tuple(reasons))
-
-
-def format_blocking_reasons(reasons: tuple[BlockingReason, ...]) -> str:
-    """Serialize reasons for audit/ memo storage: ``"code: detail; ..."``."""
-    if not reasons:
-        return _EMPTY_REASONS_MARKER
-    return "; ".join(f"{reason.code}: {reason.detail}" for reason in reasons)

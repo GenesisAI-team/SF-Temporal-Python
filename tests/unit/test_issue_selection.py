@@ -131,6 +131,6 @@ def test_format_blocking_reasons_joins_code_and_detail() -> None:
     )
 
 
-def test_format_empty_reasons_returns_placeholder_none() -> None:
-    """Approved decisions serialize to a stable empty marker."""
-    assert format_blocking_reasons(()) == "-"
+def test_format_empty_reasons_serializes_to_empty_string() -> None:
+    """Approved decisions leave no reason text in memo/audit sinks."""
+    assert format_blocking_reasons(()) == ""
