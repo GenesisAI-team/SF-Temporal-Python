@@ -42,3 +42,12 @@ class IssueWorkflowResult:
     issue_id: str
     repository: str
     blocking_reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WorkflowStartResult:
+    """Outcome of start-or-recover: create or reuse the unique durable run."""
+
+    workflow_id: str
+    run_id: str
+    started: bool
