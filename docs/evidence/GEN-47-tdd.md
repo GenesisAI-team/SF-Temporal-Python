@@ -130,7 +130,23 @@ $ uv run pytest tests/integration -m integration -v → 3 passed in 5.47s
 | `ba65473` | feat(GEN-47): H2 contracts, domain rules and replaceable ports/adapters |
 | `b4d586f` | feat(GEN-47): H2 PR-production pipeline activities + IssueWorkflow extension |
 | `3c7bd9b` | feat(GEN-47): H2 end-to-end smoke on the real Temporal stack (no tokens) |
-| docs commit | (docs/ADR/runbook/env/coverage tuples) — hash verificado al hacer push |
+| `985451d` | docs(GEN-47): ADR-0008 (PR pipeline H2), runbook pipeline, env example, architecture + evidence docs |
+| `a465693` | fix(GEN-47): explicit git identity for factory commits (CI hosts lack global config) |
+
+## 5. CI de la PR (checks obligatorios)
+
+```text
+$ gh pr create --base main  → https://github.com/GenesisAI-team/SF-Temporal-Python/pull/3
+$ gh pr checks 3
+quality       pass   25s   # 336 tests, ruff, mypy strict, coverage 100/80
+integration   pass   35s   # compose up + 3 integration tests (roundtrip + smoke)
+```
+
+Iteración de CI documentada: el primer run de integración falló en CI por
+`git commit failed: Author identity unknown` (los runners de CI no tienen
+config global de git; local sí). Corregido con identidad git explícita por
+entorno (`SF_FACTORY_GIT_USER_NAME/EMAIL` aplicada con `-c` en el commit;
+tests + runbook). Segundo run: quality PASS e integration PASS.
 
 ## 4. Qué es REAL vs SIMULADO (resumen honesto)
 
