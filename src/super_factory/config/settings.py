@@ -37,6 +37,21 @@ class Settings(BaseSettings):
     linear_dedupe_ttl_seconds: int = 86400
     audit_log_path: Path = Path("var/audit/events.jsonl")
 
+    # H2 — PR production pipeline (GEN-47)
+    factory_pipeline_enabled: bool = False
+    factory_workspace_root: Path = Path("var/factory/workspaces")
+    factory_run_ledger_path: Path = Path("var/audit/runs.jsonl")
+    factory_budget_runs_per_issue: int = 2
+    factory_task_spec_path: str = ""
+    factory_sandbox_image: str = "python:3.12-slim"
+    factory_sandbox_cpu: float = 1.0
+    factory_sandbox_memory: str = "2g"
+    factory_sandbox_command_timeout_seconds: int = 600
+    factory_base_branch: str = "main"
+    factory_linear_issue_url_template: str = (
+        "https://linear.app/genesisnavarra/issue/{issue_id}"
+    )
+
 
 def get_settings() -> Settings:
     """Return application settings (reads environment at call time)."""

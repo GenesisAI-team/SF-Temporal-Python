@@ -9,6 +9,13 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from super_factory.temporal.activities.audit import record_audit_activity
+from super_factory.temporal.activities.pipeline import (
+    plan_run_activity,
+    prepare_run_activity,
+    publish_pr_activity,
+    run_coding_agent_activity,
+    verify_run_activity,
+)
 from super_factory.temporal.activities.selection import select_issue_activity
 from super_factory.temporal.activities.smoke import echo_activity
 from super_factory.temporal.workers.queues import TASK_QUEUE_ORCHESTRATION
@@ -29,5 +36,14 @@ def build_worker(client: Client, *, task_queue: str = TASK_QUEUE_ORCHESTRATION) 
         client,
         task_queue=task_queue,
         workflows=[SmokeWorkflow, IssueWorkflow],
-        activities=[echo_activity, select_issue_activity, record_audit_activity],
+        activities=[
+            echo_activity,
+            select_issue_activity,
+            record_audit_activity,
+            plan_run_activity,
+            prepare_run_activity,
+            run_coding_agent_activity,
+            verify_run_activity,
+            publish_pr_activity,
+        ],
     )

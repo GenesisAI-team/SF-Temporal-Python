@@ -215,6 +215,8 @@ async def linear_webhook(
                 event_type=payload.type,
                 selectable_states=criteria.selectable_states,
                 allowed_repositories=criteria.allowed_repositories,
+                base_branch=settings.factory_base_branch,
+                pipeline_enabled=settings.factory_pipeline_enabled,
             )
         )
     except HTTPException:

@@ -2,7 +2,7 @@
 
 The default H2 state is an explicit failure (``UnavailableSpecSource``): the
 pipeline never invents approval criteria. Operators configure
-``SF_TASK_SPEC_PATH`` (an approved ``ApprovedTaskSpec`` JSON payload,
+``SF_FACTORY_TASK_SPEC_PATH`` (an approved ``ApprovedTaskSpec`` JSON payload,
 e.g. produced by the planning step that consumes the approved Linear issue)
 to enable real PR production locally.
 """
