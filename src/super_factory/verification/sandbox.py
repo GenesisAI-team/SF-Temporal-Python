@@ -36,6 +36,11 @@ class SandboxVerificationRunner:
         self._test_command = test_command
         self._timeout_seconds = timeout_seconds
 
+    @property
+    def sandbox_command_timeout_seconds(self) -> float:
+        """Timeout expected for the verification command (ops introspection)."""
+        return self._timeout_seconds
+
     async def run(self, command: VerificationCommand) -> VerificationOutcome:
         spec = SandboxSpec(
             run_key=command.run_key,

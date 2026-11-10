@@ -431,7 +431,6 @@ def test_default_resolvers_build_settings_driven_adapters(
     try:
         source = pipeline_activities.get_task_spec_source()
         ledger = pipeline_activities.get_run_ledger()
-        from super_factory.persistence.run_ledger import JsonLinesRunLedger
         from super_factory.planning.ports import StaticFileSpecSource
 
         assert isinstance(source, StaticFileSpecSource)
@@ -443,7 +442,30 @@ def test_default_resolvers_build_settings_driven_adapters(
             )
         )
         assert spec.objective == "approved"
-        assert isinstance(ledger, JsonLinesRunLedger)
+        from super_factory.persistence.run_ledger import JsonLinesRunLedger as _Ledger
+
+        assert isinstance(ledger, _Ledger)
         assert ledger.path == tmp_path / "runs.jsonl"
+        from super_factory.sandbox.docker import DockerSandboxRuntime
+        from super_factory.scm.git_cli import GitCommandLineRunner
+        from super_factory.scm.github_cli import GhCliPullRequests
+        from super_factory.verification.sandbox import SandboxVerificationRunner
+
+        assert isinstance(pipeline_activities.get_git_workspaces(), GitCommandLineRunner)
+        assert isinstance(
+            pipeline_activities.get_pull_request_service(), GhCliPullRequests
+        )
+        assert isinstance(
+            pipeline_activities.get_sandbox_runtime(), DockerSandboxRuntime
+        )
+        agent = pipeline_activities.get_coding_agent()
+        assert isinstance(agent, pipeline_activities.CodexCliAgent)
+        assert agent.platform == "codex-cli"
+        assert agent.sandbox_image == "python:3.12-slim"
+        verifier = pipeline_activities.get_verification_runner()
+        assert isinstance(verifier, SandboxVerificationRunner)
+        assert verifier.sandbox_command_timeout_seconds == float(
+            pipeline_activities.get_settings().factory_sandbox_command_timeout_seconds
+        )
     finally:
         pipeline_activities.reset_pipeline_ports()
