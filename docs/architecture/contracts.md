@@ -37,6 +37,16 @@ Los valores están congelados por test (`test_workflow_state_values_are_stable`)
 - `IssueWorkflowInput` / `SelectIssueResult` / `IssueWorkflowResult` / `WorkflowStartResult` (dataclasses frozen, `contracts/workflow_io.py`) — frontera con el SDK Temporal: la conversión por defecto de temporalio serializa dataclasses, mientras los contratos Pydantic hacen la validación de cara a la API. Un issue create/recover so run id `issue-<GEN-N>`.
 - `WorkflowRunCorrelation` (frozen) — línea de auditoría por delivery: correlación issue/repositorio/workflow, resultado de selección, razones de bloqueo, ids de run (None cuando el bloqueo ocurre antes del workflow).
 
+## Contratos H2 (GEN-47, ADR-0008)
+
+- **`IssueWorkflowInput` extiende** `base_branch` + `pipeline_enabled` (defaults compatibles con H1); `IssueWorkflowResult` extiende `pull_request_url`/`pull_request_number`.
+- `contracts/pipeline.py` (dataclasses frozen — plano Temporal): `PlanRunCommand`/`TaskSpecQuery`/`TaskPlan`, `PrepareRunCommand`/`RunPreparation`, `AgentRunCommand`/`AgentRunRecord`, `VerificationCommand`/`VerificationOutcome`, `PublishCommand`/`PublicationOutcome`. Eje ok/failed obligatorio: un objeto "ok" lleva payload completo; uno fallido lleva `failure_code` (razones estables de `domain/pipeline.py`) + `failure_detail`.
+- `contracts/sandboxing.py` (Pydantic frozen): `SandboxSpec` (run key, workspace, imagen, cpu/mem/timeout, red aislada y no-root por defecto — **sin campo de credenciales**), `SandboxInstance`, `SandboxCommand` (argv sin shell; payload largo por `stdin_payload`), `SandboxCommandOutcome`.
+- `contracts/scm.py` (Pydantic frozen): `WorkspaceStatus`, `CommitInfo`, `PushInfo`, `PullRequestRef`.
+- `contracts/run_ledger.py` (Pydantic frozen): `PipelineRunRecord` (bookkeeping idempotente por `run_key` = presupuesto + trazabilidad).
+- `domain/pipeline.py` — reglas puras deterministas: `run_key_for`, `is_valid_run_key`, `branch_name_for` (`feat/gen-<n>-<slug>`), `pr_title_for`/`pr_body_for` (enlaza Linear), `build_agent_prompt` (reglas duras del sandbox), `pipeline_audit_delivery_id` (`delivery#run_key#FASE`).
+- `domain/safety.py` — deny-list pura de comandos peligrosos (`find_forbidden_command`).
+
 ## Regla
 
 Nueva frontera de datos = nuevo contrato en `contracts/` + test primero. Los workflows no deben intercambiar dicts ad-hoc.
