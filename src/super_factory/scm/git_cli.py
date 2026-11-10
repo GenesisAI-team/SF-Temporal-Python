@@ -26,8 +26,16 @@ _COMMAND_TIMEOUT_SECONDS = 120.0
 class GitCommandLineRunner:
     """Real ``GitWorkspaces`` on top of the git CLI."""
 
-    def __init__(self, command_runner: CommandRunner) -> None:
+    def __init__(
+        self,
+        command_runner: CommandRunner,
+        *,
+        user_name: str = "SF-Temporal-Python Factory",
+        user_email: str = "factory@sf-temporal.local",
+    ) -> None:
         self._runner = command_runner
+        self._user_name = user_name
+        self._user_email = user_email
 
     async def ensure_workspace(
         self, repository: str, base_branch: str, branch_name: str, workspace_path: str
@@ -61,13 +69,25 @@ class GitCommandLineRunner:
             return CommitInfo(committed=False, detail="working tree clean")
         staged = await self._git(("add", "-A"), workspace_path)
         self._ensure_ok(staged, "add")
-        committed = await self._git(("commit", "-m", message), workspace_path)
+        committed = await self._git(self._commit_argv(message), workspace_path)
         self._ensure_ok(committed, "commit")
         sha = await self._git(("rev-parse", "HEAD"), workspace_path)
         self._ensure_ok(sha, "rev-parse")
         files = sum(1 for line in status.stdout_tail.splitlines() if line.strip())
         return CommitInfo(
             committed=True, sha=sha.stdout_tail.strip(), files_committed=files
+        )
+
+    def _commit_argv(self, message: str) -> tuple[str, ...]:
+        """Commit with an explicit identity (CI hosts have no global config)."""
+        return (
+            "-c",
+            f"user.name={self._user_name}",
+            "-c",
+            f"user.email={self._user_email}",
+            "commit",
+            "-m",
+            message,
         )
 
     async def push_branch(self, workspace_path: str, branch_name: str) -> PushInfo:

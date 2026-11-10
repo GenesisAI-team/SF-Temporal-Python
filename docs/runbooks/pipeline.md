@@ -35,7 +35,11 @@ para reset del operador (la re-ejecución no duplica trabajo).
 - `docker` disponible en el host del worker (versión compatible con el
   compose del repo). Sin docker: `SandboxUnavailable` → reintentos → FAILED.
 - Git disponible y credenciales de push configuradas por el operador para
-  el repositorio objetivo (H2 las gestiona FUERA del sandbox).
+  el repositorio objetivo (H2 las gestiona FUERA del sandbox). La
+  identidad de los commits es explicita por entorno
+  (`SF_FACTORY_GIT_USER_NAME` / `SF_FACTORY_GIT_USER_EMAIL`; por defecto
+  `SF-Temporal-Python Factory <factory@sf-temporal.local>`) — no depende
+  de la configuración global de git del host (requerido en CI).
 - `gh` CLI autenticado si se quiere abrir PRs reales en GitHub.
 - Imagen de sandbox que contenga el CLI de Codex para ejecución REAL
   (`SF_FACTORY_SANDBOX_IMAGE=ghcr.io/...`); la imagen por defecto

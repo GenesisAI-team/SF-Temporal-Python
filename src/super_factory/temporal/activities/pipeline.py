@@ -125,10 +125,15 @@ def get_task_spec_source() -> TaskSpecSource:
 
 
 def get_git_workspaces() -> GitWorkspaces:
-    """GitWorkspaces adapter (subprocess runner + git CLI)."""
+    """GitWorkspaces adapter (subprocess runner + git CLI + operator identity)."""
     global _git
     if _git is None:
-        _git = GitCommandLineRunner(SubprocessCommandRunner())
+        settings = get_settings()
+        _git = GitCommandLineRunner(
+            SubprocessCommandRunner(),
+            user_name=settings.factory_git_user_name,
+            user_email=settings.factory_git_user_email,
+        )
     return _git
 
 

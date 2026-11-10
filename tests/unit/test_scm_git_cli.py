@@ -105,7 +105,7 @@ async def test_commit_all_stages_and_commits_dirty_tree() -> None:
         ScriptedRunner()
         .on(("git", "status", "--porcelain"), stdout_tail=" M a.py\n?? b.txt\n")
         .on(("git", "add"), exit_code=0)
-        .on(("git", "commit"), exit_code=0)
+        .on(("git", "-c"), exit_code=0)
         .on(("git", "rev-parse"), stdout_tail="deadbeef\n")
     )
     adapter = GitCommandLineRunner(runner)
@@ -116,14 +116,34 @@ async def test_commit_all_stages_and_commits_dirty_tree() -> None:
     add_argv = list(runner.requests[1].argv)
     assert add_argv[:2] == ["git", "add"]
     commit_argv = list(runner.requests[2].argv)
+    assert commit_argv[:2] == ["git", "-c"]
+    assert "user.name=SF-Temporal-Python Factory" in commit_argv
     assert "feat(gen-47): work" in commit_argv
+    indexed_message = commit_argv[commit_argv.index("-m") + 1]
+    assert indexed_message == "feat(gen-47): work"
+
+
+async def test_commit_identity_is_configurable() -> None:
+    runner = (
+        ScriptedRunner()
+        .on(("git", "status", "--porcelain"), stdout_tail=" M a.py\n")
+        .on(("git", "-c"), exit_code=0)
+        .on(("git", "rev-parse"), stdout_tail="cafe\n")
+    )
+    adapter = GitCommandLineRunner(
+        runner, user_name="Genesis Bot", user_email="bot@genesis.example"
+    )
+    await adapter.commit_all(workspace_path=WS, message="m")
+    commit_argv = list(runner.requests[2].argv)
+    assert "user.name=Genesis Bot" in commit_argv
+    assert "user.email=bot@genesis.example" in commit_argv
 
 
 async def test_commit_all_surfaces_git_failures() -> None:
     runner = (
         ScriptedRunner()
         .on(("git", "status", "--porcelain"), stdout_tail=" M a.py\n")
-        .on(("git", "commit"), exit_code=128, stderr_tail="identity unknown")
+        .on(("git", "-c"), exit_code=128, stderr_tail="identity unknown")
     )
     adapter = GitCommandLineRunner(runner)
     with pytest.raises(SCMUnavailable, match="identity unknown"):
