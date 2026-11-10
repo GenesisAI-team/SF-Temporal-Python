@@ -30,6 +30,13 @@ Los valores están congelados por test (`test_workflow_state_values_are_stable`)
 - `EchoInput` (dataclass frozen) — entrada de `echo_activity`; lleva `workflow_id` para trazabilidad/idempotencia futura.
 - `SmokeWorkflow.run(message: str) -> list[str]` — salida de la demo.
 
+## Contratos H1 (GEN-38, ADR-0006/0007)
+
+- `IssueSelectionCriteria` (frozen) — estados seleccionables + repositorios permitidos (validados por reglas de `domain/`).
+- `IssueSnapshot` (frozen) — vista de una issue extraída de un evento Linear ya firmado; métodos tolerantes (blank state/foreign id bloquean en el selector, no en el parse).
+- `IssueWorkflowInput` / `SelectIssueResult` / `IssueWorkflowResult` / `WorkflowStartResult` (dataclasses frozen, `contracts/workflow_io.py`) — frontera con el SDK Temporal: la conversión por defecto de temporalio serializa dataclasses, mientras los contratos Pydantic hacen la validación de cara a la API. Un issue create/recover so run id `issue-<GEN-N>`.
+- `WorkflowRunCorrelation` (frozen) — línea de auditoría por delivery: correlación issue/repositorio/workflow, resultado de selección, razones de bloqueo, ids de run (None cuando el bloqueo ocurre antes del workflow).
+
 ## Regla
 
 Nueva frontera de datos = nuevo contrato en `contracts/` + test primero. Los workflows no deben intercambiar dicts ad-hoc.

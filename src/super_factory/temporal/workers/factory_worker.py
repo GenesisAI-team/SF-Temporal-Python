@@ -8,8 +8,11 @@ Run locally with the Temporal dev server (docker compose):
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from super_factory.temporal.activities.audit import record_audit_activity
+from super_factory.temporal.activities.selection import select_issue_activity
 from super_factory.temporal.activities.smoke import echo_activity
 from super_factory.temporal.workers.queues import TASK_QUEUE_ORCHESTRATION
+from super_factory.temporal.workflows.issue import IssueWorkflow
 from super_factory.temporal.workflows.smoke import SmokeWorkflow
 
 
@@ -25,6 +28,6 @@ def build_worker(client: Client, *, task_queue: str = TASK_QUEUE_ORCHESTRATION) 
     return Worker(
         client,
         task_queue=task_queue,
-        workflows=[SmokeWorkflow],
-        activities=[echo_activity],
+        workflows=[SmokeWorkflow, IssueWorkflow],
+        activities=[echo_activity, select_issue_activity, record_audit_activity],
     )

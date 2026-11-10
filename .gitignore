@@ -48,3 +48,7 @@ Thumbs.db
 logs/
 tmp/
 artifacts/
+
+# H1 runtime artifacts (audit ledger, local runs)
+var/
+

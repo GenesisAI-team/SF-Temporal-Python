@@ -1,6 +1,17 @@
-"""Application configuration (pydantic-settings, SF_ env prefix)."""
+﻿"""Application configuration (pydantic-settings, SF_ env prefix)."""
+
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def parse_selectable_states(csv_text: str) -> tuple[str, ...]:
+    """Parse the comma-separated selectable Linear states into a tuple."""
+    states = tuple(item.strip() for item in csv_text.split(",") if item.strip())
+    if not states:
+        msg = "linear selectable states must contain at least one entry"
+        raise ValueError(msg)
+    return states
 
 
 class Settings(BaseSettings):
@@ -19,6 +30,12 @@ class Settings(BaseSettings):
     github_app_id: str = ""
     github_app_private_key_path: str = ""
     database_url: str = ""
+
+    linear_target_repository: str = ""
+    linear_selectable_states: str = "Todo,In Progress"
+    linear_timestamp_tolerance_seconds: int = 60
+    linear_dedupe_ttl_seconds: int = 86400
+    audit_log_path: Path = Path("var/audit/events.jsonl")
 
 
 def get_settings() -> Settings:
