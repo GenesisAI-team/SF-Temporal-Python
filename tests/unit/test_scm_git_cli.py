@@ -3,7 +3,8 @@
 Acceptance: workspace ensure is idempotent per (repository, branch) — reuse
 existing checkouts, create the missing branch, clone missing workspaces;
 commit/push behave idempotently; runner/git failures surface as
-SCMUnavailable.
+SCMUnavailable; agent-controlled git metadata (hooks/config) is neutralized
+before every host-side git operation (P1 review finding).
 """
 
 from pathlib import Path
@@ -11,8 +12,9 @@ from pathlib import Path
 import pytest
 
 from super_factory.contracts.scm import CommitInfo, PushInfo, WorkspaceStatus
-from super_factory.process.ports import ProcessLaunchError
-from super_factory.scm.git_cli import GitCommandLineRunner
+from super_factory.process.ports import CommandRequest, ProcessLaunchError
+from super_factory.process.subprocess import SubprocessCommandRunner
+from super_factory.scm.git_cli import GitCommandLineRunner, sanitize_agent_git_metadata
 from super_factory.scm.ports import SCMUnavailable
 from tests.unit.command_runner_stubs import ScriptedRunner
 
@@ -199,3 +201,176 @@ async def test_runner_launch_failures_map_to_scm_unavailable(tmp_path: Path) -> 
         await adapter.ensure_workspace(
             repository=REPO, base_branch="main", branch_name="b", workspace_path=str(path)
         )
+
+
+# --- P1 review finding: agent-controlled git metadata must never execute ---
+
+
+async def _run_git(argv: tuple[str, ...], cwd: Path) -> None:
+    """Run a real git command (test setup only); fail loudly on errors."""
+    outcome = await SubprocessCommandRunner().run(
+        CommandRequest(argv=("git", *argv), cwd=str(cwd), timeout_seconds=60.0)
+    )
+    assert outcome.exit_code == 0, outcome.stderr_tail or outcome.stdout_tail
+
+
+async def _fresh_real_repo(tmp_path: Path) -> Path:
+    """Create a real git repository with one commit and a trusted config."""
+    repo = tmp_path / "repo"
+    await _run_git(("init", "-b", "main", "repo"), tmp_path)
+    await _run_git(("config", "user.name", "Test User"), repo)
+    await _run_git(("config", "user.email", "test@example.com"), repo)
+    (repo / "base.txt").write_text("base\n")
+    await _run_git(("add", "-A"), repo)
+    await _run_git(("commit", "-m", "base"), repo)
+    return repo
+
+
+def _poison(repo: Path, hook_name: str) -> None:
+    """Write hostile hooks/config the way a sandboxed agent would."""
+    hooks = repo / ".git" / "hooks"
+    hooks.mkdir(exist_ok=True)
+    hook = hooks / hook_name
+    hook.write_text(f"#!/bin/sh\necho ran > {hook_name}-marker.txt\nexit 1\n")
+    hook.chmod(0o755)
+    (repo / ".gitattributes").write_text("* filter=evil\n")
+    config = repo / ".git" / "config"
+    config.write_text(
+        config.read_text() + '[filter "evil"]\n\tclean = echo ran > filter-marker.txt\n'
+    )
+
+
+async def test_commit_all_never_executes_agent_controlled_git_code(
+    tmp_path: Path,
+) -> None:
+    """Host-side commit must neutralize agent hooks and filters (P1 finding)."""
+    repo = await _fresh_real_repo(tmp_path)
+    _poison(repo, "pre-commit")
+    (repo / "agent.txt").write_text("agent work\n")
+    adapter = GitCommandLineRunner(SubprocessCommandRunner())
+    info = await adapter.commit_all(
+        workspace_path=str(repo), message="feat(gen-47): agent work"
+    )
+    assert info.committed is True
+    assert not (repo / "pre-commit-marker.txt").exists()
+    assert not (repo / "filter-marker.txt").exists()
+    assert not (repo / ".git" / "hooks").exists()
+    sanitized = (repo / ".git" / "config").read_text()
+    assert "[filter" not in sanitized
+    assert "user.name" not in sanitized
+
+
+async def test_ensure_workspace_never_executes_agent_controlled_hooks(
+    tmp_path: Path,
+) -> None:
+    """Existing-workspace ensure must sanitize hooks before checkout (P1)."""
+    repo = await _fresh_real_repo(tmp_path)
+    _poison(repo, "post-checkout")
+    adapter = GitCommandLineRunner(SubprocessCommandRunner())
+    status = await adapter.ensure_workspace(
+        repository=REPO,
+        base_branch="main",
+        branch_name="feat/gen-47-new",
+        workspace_path=str(repo),
+    )
+    assert status.existed is True
+    assert status.branch_existed is False
+    assert not (repo / "post-checkout-marker.txt").exists()
+    assert not (repo / ".git" / "hooks").exists()
+    sanitized = (repo / ".git" / "config").read_text()
+    assert "[filter" not in sanitized
+
+
+def test_sanitize_agent_git_metadata_strips_execution_vectors(tmp_path: Path) -> None:
+    """Whitelist rewrite: hooks/filters/aliases/includes never survive."""
+    repo = tmp_path / "repo"
+    git_dir = repo / ".git"
+    (git_dir / "hooks").mkdir(parents=True)
+    (git_dir / "hooks" / "pre-commit").write_text("evil")
+    (git_dir / "info").mkdir()
+    (git_dir / "info" / "attributes").write_text("* filter=evil")
+    (git_dir / "config.worktree").write_text("[core]\n\teditor = evil\n")
+    (git_dir / "config").write_text(
+        "[core]\n"
+        "\trepositoryformatversion = 0\n"
+        "\tbare = false\n"
+        "\thooksPath = evil-hooks\n"
+        "\tfsmonitor = evil-fsmonitor\n"
+        "[extensions]\n"
+        "\tworktreeConfig = true\n"
+        "\tobjectFormat = sha1\n"
+        '[remote "origin"]\n'
+        "\turl = https://example.com/owner/repo.git\n"
+        "\tpushurl = https://evil.example/push.git\n"
+        "[alias]\n"
+        "\tstatus = !evil\n"
+        '[filter "evil"]\n'
+        "\tclean = evil\n"
+        "[include]\n"
+        "\tpath = evil\n"
+    )
+    sanitize_agent_git_metadata(repo)
+    assert not (git_dir / "hooks").exists()
+    assert not (git_dir / "info" / "attributes").exists()
+    assert not (git_dir / "config.worktree").exists()
+    sanitized = (git_dir / "config").read_text()
+    assert "hooksPath" not in sanitized
+    assert "fsmonitor" not in sanitized
+    assert "pushurl" not in sanitized
+    assert "worktreeConfig" not in sanitized
+    assert "[alias]" not in sanitized
+    assert "[filter" not in sanitized
+    assert "[include]" not in sanitized
+    assert "repositoryformatversion = 0" in sanitized
+    assert "objectformat = sha1" in sanitized
+    assert '[remote "origin"]' in sanitized
+    assert "https://example.com/owner/repo.git" in sanitized
+
+
+def test_sanitize_agent_git_metadata_neutralizes_minimal_config(
+    tmp_path: Path,
+) -> None:
+    """Nothing safe to keep leaves an empty config; file-shaped hooks go too."""
+    repo = tmp_path / "repo"
+    git_dir = repo / ".git"
+    git_dir.mkdir(parents=True)
+    (git_dir / "hooks").write_text("not a directory")
+    (git_dir / "config").write_text("[alias]\n\tco = checkout\n")
+    sanitize_agent_git_metadata(repo)
+    assert not (git_dir / "hooks").exists()
+    assert (git_dir / "config").read_text() == ""
+
+
+def test_sanitize_agent_git_metadata_rejects_non_directory_git_dir(
+    tmp_path: Path,
+) -> None:
+    """Fail closed: a .git file (worktree pointer) is an unsupported layout."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").write_text("gitdir: elsewhere\n")
+    with pytest.raises(SCMUnavailable, match="unsupported git metadata layout"):
+        sanitize_agent_git_metadata(repo)
+
+
+def test_sanitize_agent_git_metadata_ignores_missing_git_dir(tmp_path: Path) -> None:
+    """No .git at all: nothing to sanitize (git reports the missing repo)."""
+    sanitize_agent_git_metadata(tmp_path)
+
+
+def test_sanitize_agent_git_metadata_tolerates_malformed_config(tmp_path: Path) -> None:
+    """Comments, blank lines and garbage lines are skipped, not fatal."""
+    repo = tmp_path / "repo"
+    git_dir = repo / ".git"
+    git_dir.mkdir(parents=True)
+    (git_dir / "config").write_text(
+        "# agent note\n"
+        "\n"
+        "orphan line without section\n"
+        "[core]\n"
+        "bare = false\n"
+        "dangling key line\n"
+    )
+    sanitize_agent_git_metadata(repo)
+    sanitized = (git_dir / "config").read_text()
+    assert "bare = false" in sanitized
+    assert "agent note" not in sanitized
