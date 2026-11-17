@@ -26,6 +26,10 @@ class SandboxSpec(BaseModel):
     command_timeout_seconds: int = Field(default=600, gt=0)
     network_isolated: bool = True
     run_as_non_root: bool = True
+    # GEN-52: implementer/gate sessions mount the workspace read-write (they
+    # produce the artifact); review sessions set this so they can never alter
+    # the artifact that is published after their verdict.
+    workspace_read_only: bool = False
 
     @field_validator("run_key")
     @classmethod

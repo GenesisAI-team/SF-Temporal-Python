@@ -121,3 +121,62 @@ Cobertura de los archivos nuevos: `domain/quality.py`,
 `verification/quality_gates.py`, `review/ports.py`, `review/sandbox.py`
 (IMPORTANT: ≥ 80 %); registrados en `scripts/check_coverage.py` en esta
 misma PR.
+
+## Ciclos 3–5 — arreglo de los hallazgos de revisión de PR temporal#4
+
+Tres hallazgos de `chatgpt-codex-connector` (hilos 4601404819, 4601404814,
+4601404847), cada uno con su ciclo RED → GREEN sobre la rama de la PR.
+
+**Ciclo 3 — P1: historiales pre-cambio no podían reanudarse (issue.py).**
+RED: `tests/temporal/test_issue_workflow_compat.py` genera historiales con
+una referencia byte-fiel de la implementación H2
+(`tests/temporal/h2_reference.py`, incluidas las shapes de entrada de
+GEN-47) y el replay con la implementación H3 falla por el motivo correcto:
+
+```text
+temporalio.workflow._exceptions.NondeterminismError: [TMPRL1100]
+Activity type of scheduled event 'publish_pr_activity' does not match
+activity type of activity command 'review_run_activity'
+```
+
+(los 3 escenarios: PR_READY, BLOCKED por gates, BLOCKED por changeset
+vacío). GREEN: patch marker `review-before-publish` (API
+`workflow.patched`) justo delante del primer comando divergente (la forma
+del input del agente); las historias sin marker toman la rama legacy
+(`_legacy_verify_publish`, `LegacyAgentRunCommand`,
+`LegacyPublishCommand`) que reproduce la secuencia H2 byte a byte,
+incluidas las serializaciones sin `defects`/`gate_summaries`. Los tres
+escenarios pasan, y el replay de historias H3 sigue en verde
+(`test_repair_history_replays_deterministically`).
+
+**Ciclo 4 — P1: los defectos no llegaban al prompt del agente real
+(codex_cli.py).** RED:
+`test_agent_prompt_carries_repair_defects_via_stdin` —payload real de
+stdin, no solo el comando del fake agent— falla porque
+`CodexCliAgent.run()` llamaba a `build_agent_prompt()` sin
+`command.defects`. GREEN: `defects=command.defects` en la llamada;
+`test_agent_prompt_has_no_repair_block_on_first_session` fija que la
+primera sesión no lleva bloque de reparación.
+
+**Ciclo 5 — P2: el revisor podía mutar el artefacto (sandbox.py).** RED:
+tres tests (`test_reviewer_starts_read_only_workspace_sandbox`,
+`test_ensure_sandbox_can_mount_workspace_read_only`,
+`test_sandbox_spec_defaults_secure`) fallan por
+`'SandboxSpec' object has no attribute 'workspace_read_only'`. GREEN:
+`SandboxSpec.workspace_read_only` (default False), el runtime Docker monta
+`/workspace:ro` cuando está activo, y `SandboxReviewer` lo activa: la
+revisión no puede alterar el artefacto que se publica tras su veredicto.
+
+## Gates tras los arreglos (locales, misma línea que CI)
+
+```text
+uv run ruff check .                                  → All checks passed!
+uv run mypy src                                      → Success: no issues found in 73 source files
+uv run pytest tests/unit tests/temporal -q           → 414 passed
+uv run coverage run -m pytest tests/unit tests/temporal -q
+uv run coverage combine && uv run coverage json -o coverage.json
+uv run python -m scripts.check_coverage              → coverage policy OK (per-file 100/80)
+```
+
+Workflow (CORE) sigue en 100 % líneas y ramas, incluida la rama legacy de
+replay (cobrada por los tres escenarios de compat).

@@ -179,3 +179,14 @@ async def test_sandbox_unavailability_propagates_for_retries() -> None:
     with pytest.raises(SandboxUnavailable, match="docker down"):
         await SandboxReviewer(sandbox).review(_command())
     assert sandbox.cleaned == []
+
+
+async def test_reviewer_starts_read_only_workspace_sandbox() -> None:
+    """GEN-52: the review sandbox mounts the workspace read-only, so a
+    reviewer edit can never alter the artifact that gets published."""
+    sandbox = FakeSandboxRuntime()
+    sandbox.outcome = SandboxCommandOutcome(exit_code=0, output_tail="APPROVED\n")
+    await SandboxReviewer(sandbox).review(_command())
+    assert len(sandbox.started_specs) == 1
+    spec = sandbox.started_specs[0]
+    assert spec.workspace_read_only is True

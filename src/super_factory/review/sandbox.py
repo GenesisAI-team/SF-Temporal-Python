@@ -65,6 +65,9 @@ class SandboxReviewer:
             workspace_path=command.workspace_path,
             image=self._sandbox_image,
             command_timeout_seconds=int(self._command_timeout_seconds),
+            # The reviewer must never alter the artifact that is published
+            # after its verdict (its prompt says read-only; enforce it).
+            workspace_read_only=True,
         )
         instance = await self._sandbox.ensure_sandbox(spec)
         prompt = build_reviewer_prompt(

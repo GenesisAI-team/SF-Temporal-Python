@@ -192,6 +192,9 @@ def test_sandbox_spec_defaults_secure() -> None:
     spec = SandboxSpec(run_key="GEN-47-v1", workspace_path="/ws")
     assert spec.network_isolated is True
     assert spec.run_as_non_root is True
+    # GEN-52: implementer sessions keep the workspace read-write; review
+    # sessions opt into a read-only bind mount via workspace_read_only.
+    assert spec.workspace_read_only is False
     assert spec.image == "python:3.12-slim"
     assert spec.cpu_limit == 1.0
     assert spec.memory_limit == "2g"
