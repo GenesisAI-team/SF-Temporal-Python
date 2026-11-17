@@ -1,12 +1,13 @@
-"""H2 PR-production activities (GEN-47): effects go through replaceable ports.
+"""H2/H3 PR-production activities (GEN-47/GEN-52): effects via ports.
 
 Sequence wired by ``IssueWorkflow``:
 plan_run_activity (PLANNING) -> prepare_run_activity (PREPARING, budget +
 workspace) -> run_coding_agent_activity (IMPLEMENTING) ->
-verify_run_activity (VERIFYING) -> publish_pr_activity (REVIEWING).
-Functional decisions come back as outcome values (workflow -> BLOCKED);
-technical/transport failures raise so Temporal's retry policies absorb
-them. All I/O passes through module ports with test setters.
+verify_run_activity (VERIFYING, independent quality gates) ->
+review_run_activity (REVIEWING, independent review) -> publish_pr_activity.
+Functional decisions come back as outcome values (workflow -> BLOCKED or
+bounded repair); technical/transport failures raise so Temporal's retry
+policies absorb them. All I/O passes through module ports with test setters.
 """
 
 from datetime import UTC, datetime
@@ -30,6 +31,7 @@ from super_factory.contracts.pipeline import (
     VerificationCommand,
     VerificationOutcome,
 )
+from super_factory.contracts.quality import ReviewCommand, ReviewOutcome
 from super_factory.contracts.run_ledger import PipelineRunRecord
 from super_factory.domain.pipeline import (
     REASON_BUDGET_EXHAUSTED,
@@ -41,6 +43,7 @@ from super_factory.domain.pipeline import (
     pr_title_for,
     run_key_for,
 )
+from super_factory.domain.quality import default_gate_suite
 from super_factory.persistence.run_ledger import JsonLinesRunLedger, PipelineRunLedger
 from super_factory.planning.ports import (
     SpecSourceUnavailable,
@@ -49,13 +52,15 @@ from super_factory.planning.ports import (
     UnavailableSpecSource,
 )
 from super_factory.process.subprocess import SubprocessCommandRunner
+from super_factory.review.ports import IndependentReviewer
+from super_factory.review.sandbox import SandboxReviewer
 from super_factory.sandbox.docker import DockerSandboxRuntime
 from super_factory.sandbox.ports import SandboxRuntime
 from super_factory.scm.git_cli import GitCommandLineRunner
 from super_factory.scm.github_cli import GhCliPullRequests
 from super_factory.scm.ports import GitWorkspaces, PullRequestsService
 from super_factory.verification.ports import VerificationRunner
-from super_factory.verification.sandbox import SandboxVerificationRunner
+from super_factory.verification.quality_gates import SandboxQualityGatesRunner
 
 _spec_source: TaskSpecSource | None = None
 _git: GitWorkspaces | None = None
@@ -63,6 +68,7 @@ _pulls: PullRequestsService | None = None
 _ledger: PipelineRunLedger | None = None
 _agent: CodingAgent | None = None
 _verifier: VerificationRunner | None = None
+_reviewer: IndependentReviewer | None = None
 
 
 def set_task_spec_source(source: TaskSpecSource | None) -> None:
@@ -101,15 +107,22 @@ def set_verification_runner(runner: VerificationRunner | None) -> None:
     _verifier = runner
 
 
+def set_reviewer(reviewer: IndependentReviewer | None) -> None:
+    """Replace the independent reviewer port (testing seam)."""
+    global _reviewer
+    _reviewer = reviewer
+
+
 def reset_pipeline_ports() -> None:
     """Restore settings-driven defaults (tests/production wiring)."""
-    global _spec_source, _git, _pulls, _ledger, _agent, _verifier
+    global _spec_source, _git, _pulls, _ledger, _agent, _verifier, _reviewer
     _spec_source = None
     _git = None
     _pulls = None
     _ledger = None
     _agent = None
     _verifier = None
+    _reviewer = None
 
 
 def get_task_spec_source() -> TaskSpecSource:
@@ -173,16 +186,30 @@ def get_coding_agent() -> CodingAgent:
 
 
 def get_verification_runner() -> VerificationRunner:
-    """VerificationRunner adapter (tests inside the sandbox runtime)."""
+    """VerificationRunner adapter (independent quality gates in the sandbox)."""
     global _verifier
     if _verifier is None:
         settings = get_settings()
-        _verifier = SandboxVerificationRunner(
+        _verifier = SandboxQualityGatesRunner(
             get_sandbox_runtime(),
             sandbox_image=settings.factory_sandbox_image,
+            gates=default_gate_suite(),
             timeout_seconds=float(settings.factory_sandbox_command_timeout_seconds),
         )
     return _verifier
+
+
+def get_reviewer() -> IndependentReviewer:
+    """IndependentReviewer adapter (reviewer session inside the sandbox)."""
+    global _reviewer
+    if _reviewer is None:
+        settings = get_settings()
+        _reviewer = SandboxReviewer(
+            get_sandbox_runtime(),
+            sandbox_image=settings.factory_sandbox_image,
+            command_timeout_seconds=float(settings.factory_sandbox_command_timeout_seconds),
+        )
+    return _reviewer
 
 
 def workspace_path_for(run_key: str) -> Path:
@@ -283,10 +310,19 @@ async def run_coding_agent_activity(command: AgentRunCommand) -> AgentRunRecord:
 
 @activity.defn(name="verify_run_activity")
 async def verify_run_activity(command: VerificationCommand) -> VerificationOutcome:
-    """Re-run the tests inside the sandbox; technical failures propagate."""
+    """Run the independent quality gates inside the sandbox; technical
+    failures propagate."""
     if activity.in_activity():
         activity.heartbeat()
     return await get_verification_runner().run(command)
+
+
+@activity.defn(name="review_run_activity")
+async def review_run_activity(command: ReviewCommand) -> ReviewOutcome:
+    """Run the independent review session; technical failures propagate."""
+    if activity.in_activity():
+        activity.heartbeat()
+    return await get_reviewer().review(command)
 
 
 @activity.defn(name="publish_pr_activity")
@@ -333,6 +369,7 @@ async def publish_pr_activity(command: PublishCommand) -> PublicationOutcome:
             objective=command.objective,
             acceptance_criteria=command.acceptance_criteria,
             linear_template=command.linear_url_template,
+            gate_summaries=command.gate_summaries,
         ),
     )
     return PublicationOutcome(published=True, pr_url=created.url, pr_number=created.number)

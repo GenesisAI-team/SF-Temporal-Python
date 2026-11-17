@@ -12,6 +12,7 @@ carries the payload, a failure object always carries a ``failure_code`` and
 
 from dataclasses import dataclass
 
+from super_factory.contracts.quality import GateOutcome
 from super_factory.domain.pipeline import is_valid_run_key, run_key_for
 from super_factory.domain.task_spec import all_non_empty, is_non_empty, is_valid_issue_id
 
@@ -123,7 +124,11 @@ class RunPreparation:
 
 @dataclass(frozen=True)
 class AgentRunCommand:
-    """Input of ``run_coding_agent_activity`` (spec flattened for the workflow)."""
+    """Input of ``run_coding_agent_activity`` (spec flattened for the workflow).
+
+    ``defects`` is empty on the first implementation session and carries the
+    independent verification/review feedback on repair attempts (GEN-52).
+    """
 
     issue_id: str
     repository: str
@@ -137,6 +142,12 @@ class AgentRunCommand:
     constraints: tuple[str, ...]
     dependencies: tuple[str, ...]
     workspace_path: str
+    defects: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not all_non_empty(list(self.defects)):
+            msg = "defects must not contain blank items"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -170,11 +181,16 @@ class VerificationCommand:
 
 @dataclass(frozen=True)
 class VerificationOutcome:
-    """Output of the verification phase."""
+    """Output of the verification phase.
+
+    ``gates`` carries the per-gate evidence of the independent quality-gate
+    suite (GEN-52); it stays empty for verifiers without gate detail.
+    """
 
     passed: bool
     commands: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    gates: tuple[GateOutcome, ...] = ()
     failure_code: str = ""
     failure_detail: str = ""
 
@@ -199,6 +215,12 @@ class PublishCommand:
     objective: str
     acceptance_criteria: tuple[str, ...]
     linear_url_template: str
+    gate_summaries: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not all_non_empty(list(self.gate_summaries)):
+            msg = "gate_summaries must not contain blank items"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)

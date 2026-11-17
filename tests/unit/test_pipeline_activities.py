@@ -25,6 +25,7 @@ from super_factory.contracts.pipeline import (
     VerificationCommand,
     VerificationOutcome,
 )
+from super_factory.contracts.quality import ReviewCommand, ReviewOutcome
 from super_factory.contracts.run_ledger import PipelineRunRecord
 from super_factory.contracts.scm import CommitInfo, PullRequestRef, PushInfo, WorkspaceStatus
 from super_factory.domain.pipeline import (
@@ -141,6 +142,16 @@ class FakeVerifier:
         return self.outcome
 
 
+class FakeReviewer:
+    def __init__(self, outcome: ReviewOutcome) -> None:
+        self.outcome = outcome
+        self.commands: list[ReviewCommand] = []
+
+    async def review(self, command: ReviewCommand) -> ReviewOutcome:
+        self.commands.append(command)
+        return self.outcome
+
+
 @pytest.fixture
 def ports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Wire fakes into the activity module and force settings to tmp paths."""
@@ -154,13 +165,22 @@ def ports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     verifier = FakeVerifier(
         VerificationOutcome(passed=True, commands=("pytest",), evidence=("ok",))
     )
+    reviewer = FakeReviewer(ReviewOutcome(approved=True))
     pipeline_activities.set_git_workspaces(git)
     pipeline_activities.set_pull_request_service(pulls)
     pipeline_activities.set_run_ledger(ledger)
     pipeline_activities.set_coding_agent(agent)
     pipeline_activities.set_verification_runner(verifier)
+    pipeline_activities.set_reviewer(reviewer)
     try:
-        yield {"git": git, "pulls": pulls, "ledger": ledger, "agent": agent, "verifier": verifier}
+        yield {
+            "git": git,
+            "pulls": pulls,
+            "ledger": ledger,
+            "agent": agent,
+            "verifier": verifier,
+            "reviewer": reviewer,
+        }
     finally:
         pipeline_activities.reset_pipeline_ports()
 
@@ -355,6 +375,21 @@ def test_verify_activity_delegates_to_port(ports: dict[str, Any]) -> None:
     assert ports["verifier"].commands == [command]
 
 
+def test_review_activity_delegates_to_port(ports: dict[str, Any]) -> None:
+    command = ReviewCommand(
+        issue_id="GEN-47",
+        run_key="GEN-47-v1",
+        workspace_path="/ws",
+        branch_name="feat/gen-47-t",
+        base_branch="main",
+        objective="Do the thing",
+        acceptance_criteria=("works", "tested"),
+    )
+    outcome = _execute(pipeline_activities.review_run_activity(command))
+    assert outcome.approved
+    assert ports["reviewer"].commands == [command]
+
+
 def _publish_command(**overrides: object) -> PublishCommand:
     fields: dict[str, object] = {
         "issue_id": "GEN-47",
@@ -458,10 +493,11 @@ def test_default_resolvers_build_settings_driven_adapters(
 
         assert isinstance(ledger, _Ledger)
         assert ledger.path == tmp_path / "runs.jsonl"
+        from super_factory.review.sandbox import SandboxReviewer
         from super_factory.sandbox.docker import DockerSandboxRuntime
         from super_factory.scm.git_cli import GitCommandLineRunner
         from super_factory.scm.github_cli import GhCliPullRequests
-        from super_factory.verification.sandbox import SandboxVerificationRunner
+        from super_factory.verification.quality_gates import SandboxQualityGatesRunner
 
         assert isinstance(pipeline_activities.get_git_workspaces(), GitCommandLineRunner)
         assert isinstance(
@@ -475,9 +511,12 @@ def test_default_resolvers_build_settings_driven_adapters(
         assert agent.platform == "codex-cli"
         assert agent.sandbox_image == "python:3.12-slim"
         verifier = pipeline_activities.get_verification_runner()
-        assert isinstance(verifier, SandboxVerificationRunner)
+        assert isinstance(verifier, SandboxQualityGatesRunner)
         assert verifier.sandbox_command_timeout_seconds == float(
             pipeline_activities.get_settings().factory_sandbox_command_timeout_seconds
         )
+        reviewer = pipeline_activities.get_reviewer()
+        assert isinstance(reviewer, SandboxReviewer)
+        assert reviewer.sandbox_image == "python:3.12-slim"
     finally:
         pipeline_activities.reset_pipeline_ports()

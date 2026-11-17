@@ -99,8 +99,10 @@ def pr_body_for(
     objective: str,
     acceptance_criteria: tuple[str, ...],
     linear_template: str = _LINEAR_URL_TEMPLATE,
+    gate_summaries: tuple[str, ...] = (),
 ) -> str:
-    """PR body linking the Linear issue and listing the accepted criteria."""
+    """PR body linking the Linear issue, the accepted criteria and the
+    evidence of the independently executed quality gates."""
     lines: list[str] = [
         pr_title_for(issue_id, objective),
         "",
@@ -110,6 +112,9 @@ def pr_body_for(
         "",
     ]
     lines.extend(f"- [x] {criterion}" for criterion in acceptance_criteria)
+    if gate_summaries:
+        lines.extend(("", "## Verified evidence", ""))
+        lines.extend(f"- {summary}" for summary in gate_summaries)
     lines.extend(
         (
             "",
@@ -136,12 +141,15 @@ def build_agent_prompt(
     branch_name: str,
     exclusions: tuple[str, ...] = (),
     constraints: tuple[str, ...] = (),
+    defects: tuple[str, ...] = (),
 ) -> str:
     """Deterministic prompt for the coding agent executed inside the sandbox.
 
     The approved scope travels with the prompt: dropping ``exclusions`` or
     ``constraints`` would let the agent produce a PR outside the approved
-    specification.
+    specification. ``defects`` (GEN-52) carries the independent
+    verification/review feedback on repair attempts; without it the prompt is
+    the plain implementation prompt.
     """
     criteria_lines = "\n".join(f"- {criterion}" for criterion in acceptance_criteria)
     scope_block = "".join(
@@ -152,6 +160,14 @@ def build_agent_prompt(
         )
         if section
     )
+    repair_block = ""
+    if defects:
+        feedback_lines = "\n".join(f"- {item}" for item in defects)
+        repair_block = (
+            "\nRepair feedback (defects reported by independent verification"
+            "/review; fix exactly these without touching anything else):\n"
+            f"{feedback_lines}\n"
+        )
     return (
         "You are the coding agent of the SF-Temporal-Python Software Factory.\n"
         "Working directory: /workspace (repository mounted read-write).\n"
@@ -164,6 +180,7 @@ def build_agent_prompt(
         "Acceptance criteria:\n"
         f"{criteria_lines}\n"
         f"{scope_block}"
+        f"{repair_block}"
         "\n"
         "Hard rules:\n"
         "- The sandbox has no network access and receives no credentials.\n"

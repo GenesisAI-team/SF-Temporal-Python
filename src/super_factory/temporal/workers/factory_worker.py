@@ -13,6 +13,7 @@ from super_factory.temporal.activities.pipeline import (
     plan_run_activity,
     prepare_run_activity,
     publish_pr_activity,
+    review_run_activity,
     run_coding_agent_activity,
     verify_run_activity,
 )
@@ -44,6 +45,7 @@ def build_worker(client: Client, *, task_queue: str = TASK_QUEUE_ORCHESTRATION) 
             prepare_run_activity,
             run_coding_agent_activity,
             verify_run_activity,
+            review_run_activity,
             publish_pr_activity,
         ],
     )

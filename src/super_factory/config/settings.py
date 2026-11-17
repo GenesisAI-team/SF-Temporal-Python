@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +49,8 @@ class Settings(BaseSettings):
     factory_sandbox_memory: str = "2g"
     factory_sandbox_command_timeout_seconds: int = 600
     factory_base_branch: str = "main"
+    # H3 — quality gates, independent review and bounded repair (GEN-52)
+    factory_repair_attempts: int = Field(default=2, ge=0)
     factory_git_user_name: str = "SF-Temporal-Python Factory"
     factory_git_user_email: str = "factory@sf-temporal.local"
     factory_git_transport_url_template: str = "https://github.com/{repository}.git"

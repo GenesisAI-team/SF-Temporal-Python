@@ -79,6 +79,7 @@ def test_h2_pipeline_settings_env_overrides(monkeypatch) -> None:  # type: ignor
     monkeypatch.setenv("SF_FACTORY_SANDBOX_MEMORY", "4g")
     monkeypatch.setenv("SF_FACTORY_SANDBOX_COMMAND_TIMEOUT_SECONDS", "900")
     monkeypatch.setenv("SF_FACTORY_BASE_BRANCH", "develop")
+    monkeypatch.setenv("SF_FACTORY_REPAIR_ATTEMPTS", "3")
     settings = _clean_settings()
     assert settings.factory_pipeline_enabled is True
     assert settings.factory_workspace_root == Path("out/ws")
@@ -90,6 +91,7 @@ def test_h2_pipeline_settings_env_overrides(monkeypatch) -> None:  # type: ignor
     assert settings.factory_sandbox_memory == "4g"
     assert settings.factory_sandbox_command_timeout_seconds == 900
     assert settings.factory_base_branch == "develop"
+    assert settings.factory_repair_attempts == 3
 
 
 def test_h1_webhook_settings_env_overrides(monkeypatch) -> None:  # type: ignore[no-untyped-def]
