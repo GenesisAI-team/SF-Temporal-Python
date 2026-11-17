@@ -12,6 +12,7 @@ and the Temporal SDK stay behind them.
 """
 
 from datetime import timedelta
+from typing import cast
 
 from temporalio import workflow
 
@@ -21,6 +22,8 @@ with workflow.unsafe.imports_passed_through():
     from super_factory.contracts.pipeline import (
         AgentRunCommand,
         AgentRunRecord,
+        LegacyAgentRunCommand,
+        LegacyPublishCommand,
         PlanRunCommand,
         PrepareRunCommand,
         PublishCommand,
@@ -93,6 +96,15 @@ _AGENT_RETRIES = _phase_retries(attempts=2, initial=2)
 _VERIFY_RETRIES = _phase_retries(attempts=3)
 _REVIEW_RETRIES = _phase_retries(attempts=3)
 _PUBLISH_RETRIES = _phase_retries(attempts=3)
+
+# GEN-52 (ADR-0009): marker that splits the two compatible command sequences
+# of this workflow. Executions started before the independent review existed
+# (H2, GEN-47) replay the legacy branch below, byte-identically to what the
+# H2 worker wrote; executions started with this code carry the marker and
+# take the review/repair loop. Without it a resumed pre-GEN-52 execution
+# would schedule ``review_run_activity`` where its history already scheduled
+# ``publish_pr_activity`` and could never resume.
+_PATCH_REVIEW_BEFORE_PUBLISH = "review-before-publish"
 
 
 @workflow.defn(name="IssueWorkflow")
@@ -208,7 +220,12 @@ class IssueWorkflow:
         await self._audit_phase(
             data, plan.run_key, IssueWorkflowState.PREPARING, ok=True, run_id=workflow_run_id
         )
-        agent_record = await self._run_agent(data, plan, preparation, defects=())
+        # Patched before the first divergent command (the agent input shape):
+        # pre-GEN-52 histories carry no marker and replay the H2 sequence.
+        legacy_replay = not workflow.patched(_PATCH_REVIEW_BEFORE_PUBLISH)
+        agent_record = await self._run_agent(
+            data, plan, preparation, defects=(), legacy=legacy_replay
+        )
         if not agent_record.completed:
             return await self._finish_blocked(
                 data,
@@ -228,7 +245,7 @@ class IssueWorkflow:
             data, plan.run_key, IssueWorkflowState.IMPLEMENTING, ok=True, run_id=workflow_run_id
         )
         return await self._verify_review_publish_loop(
-            data, plan, preparation, workflow_run_id
+            data, plan, preparation, workflow_run_id, legacy=legacy_replay
         )
 
     async def _verify_review_publish_loop(
@@ -237,6 +254,8 @@ class IssueWorkflow:
         plan: TaskPlan,
         preparation: RunPreparation,
         workflow_run_id: str,
+        *,
+        legacy: bool,
     ) -> IssueWorkflowResult:
         """Gates -> review -> publish, with a bounded repair loop in between.
 
@@ -245,7 +264,13 @@ class IssueWorkflow:
         reviews block directly (repairs cannot fix an out-of-scope change or
         a broken reviewer). The loop always terminates: every iteration ends
         in a return or consumes one of the finite repair attempts.
+        Pre-GEN-52 histories (``legacy=True``, no patch marker) replay the
+        H2 sequence in :meth:`_legacy_verify_publish` instead.
         """
+        if legacy:
+            return await self._legacy_verify_publish(
+                data, plan, preparation, workflow_run_id
+            )
         repair_attempts = 0
         while True:
             verification = await workflow.execute_activity(
@@ -409,11 +434,33 @@ class IssueWorkflow:
         preparation: RunPreparation,
         *,
         defects: tuple[str, ...],
+        legacy: bool = False,
     ) -> AgentRunRecord:
-        """One agent session; ``defects`` carry the repair feedback (GEN-52)."""
-        return await workflow.execute_activity(
-            run_coding_agent_activity,
-            AgentRunCommand(
+        """One agent session; ``defects`` carry the repair feedback (GEN-52).
+
+        ``legacy=True`` replays pre-GEN-52 histories: the activity input must
+        serialize exactly as the H2 worker wrote it (without ``defects``).
+        The cast is a replay byte shape only — the activity deserializes with
+        its own ``AgentRunCommand`` hint, filling ``defects`` with its default.
+        """
+        command: AgentRunCommand | LegacyAgentRunCommand
+        if legacy:
+            command = LegacyAgentRunCommand(
+                issue_id=data.issue_id,
+                repository=data.repository,
+                spec_version=plan.spec_version,
+                run_key=plan.run_key,
+                branch_name=plan.branch_name,
+                base_branch=data.base_branch,
+                objective=plan.objective,
+                acceptance_criteria=plan.acceptance_criteria,
+                exclusions=plan.exclusions,
+                constraints=plan.constraints,
+                dependencies=plan.dependencies,
+                workspace_path=preparation.workspace_path,
+            )
+        else:
+            command = AgentRunCommand(
                 issue_id=data.issue_id,
                 repository=data.repository,
                 spec_version=plan.spec_version,
@@ -427,9 +474,111 @@ class IssueWorkflow:
                 dependencies=plan.dependencies,
                 workspace_path=preparation.workspace_path,
                 defects=defects,
-            ),
+            )
+        return await workflow.execute_activity(
+            run_coding_agent_activity,
+            cast(AgentRunCommand, command),
             start_to_close_timeout=_AGENT_TIMEOUT,
             retry_policy=_AGENT_RETRIES,
+        )
+
+    async def _legacy_verify_publish(
+        self,
+        data: IssueWorkflowInput,
+        plan: TaskPlan,
+        preparation: RunPreparation,
+        workflow_run_id: str,
+    ) -> IssueWorkflowResult:
+        """H2 (pre-GEN-52) tail of the pipeline, kept for replay compatibility.
+
+        Old histories scheduled ``publish_pr_activity`` right after the
+        verifying audit, without the review phase, and audited REVIEWING only
+        after publication. Reproducing that command sequence byte-identically
+        (including the legacy publish input without ``gate_summaries``) lets
+        a worker updated to GEN-52 resume those executions.
+        """
+        verification = await workflow.execute_activity(
+            verify_run_activity,
+            VerificationCommand(
+                issue_id=data.issue_id,
+                run_key=plan.run_key,
+                workspace_path=preparation.workspace_path,
+                acceptance_criteria=plan.acceptance_criteria,
+            ),
+            start_to_close_timeout=_VERIFY_TIMEOUT,
+            retry_policy=_VERIFY_RETRIES,
+        )
+        if not verification.passed:
+            return await self._finish_blocked(
+                data,
+                plan.run_key,
+                verification.failure_code,
+                verification.failure_detail,
+            )
+        workflow.upsert_memo(
+            {
+                "issue_id": data.issue_id,
+                "repository": data.repository,
+                "workflow_state": IssueWorkflowState.VERIFYING.value,
+                "run_key": plan.run_key,
+            }
+        )
+        await self._audit_phase(
+            data, plan.run_key, IssueWorkflowState.VERIFYING, ok=True, run_id=workflow_run_id
+        )
+        publication = await workflow.execute_activity(
+            publish_pr_activity,
+            cast(
+                PublishCommand,
+                LegacyPublishCommand(
+                    issue_id=data.issue_id,
+                    repository=data.repository,
+                    run_key=plan.run_key,
+                    branch_name=plan.branch_name,
+                    base_branch=data.base_branch,
+                    workspace_path=preparation.workspace_path,
+                    objective=plan.objective,
+                    acceptance_criteria=plan.acceptance_criteria,
+                    linear_url_template="https://linear.app/genesisnavarra/issue/{issue_id}",
+                ),
+            ),
+            start_to_close_timeout=_PUBLISH_TIMEOUT,
+            retry_policy=_PUBLISH_RETRIES,
+        )
+        if not publication.published:
+            return await self._finish_blocked(
+                data, plan.run_key, publication.failure_code, publication.failure_detail
+            )
+        workflow.upsert_memo(
+            {
+                "issue_id": data.issue_id,
+                "repository": data.repository,
+                "workflow_state": IssueWorkflowState.REVIEWING.value,
+                "run_key": plan.run_key,
+            }
+        )
+        await self._audit_phase(
+            data, plan.run_key, IssueWorkflowState.REVIEWING, ok=True, run_id=workflow_run_id
+        )
+        workflow.upsert_memo(
+            {
+                "issue_id": data.issue_id,
+                "repository": data.repository,
+                "workflow_state": IssueWorkflowState.PR_READY.value,
+                "run_key": plan.run_key,
+                "pull_request_url": publication.pr_url,
+            }
+        )
+        await self._audit_phase(
+            data, plan.run_key, IssueWorkflowState.PR_READY, ok=True, run_id=workflow_run_id
+        )
+        return IssueWorkflowResult(
+            workflow_state=IssueWorkflowState.PR_READY.value,
+            issue_id=data.issue_id,
+            repository=data.repository,
+            blocking_reasons=(),
+            pull_request_url=publication.pr_url,
+            pull_request_number=publication.pr_number,
         )
 
     async def _repair_or_block(

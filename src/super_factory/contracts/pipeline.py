@@ -246,3 +246,50 @@ class PublicationOutcome:
         if not (self.failure_code and self.failure_detail):
             msg = "failed publications must carry failure_code and failure_detail"
             raise ValueError(msg)
+
+
+@dataclass(frozen=True)
+class LegacyAgentRunCommand:
+    """Pre-GEN-52 (H2) shape of the coding-agent input, kept for replay.
+
+    Histories produced before GEN-52 (ADR-0009) scheduled
+    ``run_coding_agent_activity`` with this input: it serializes without the
+    ``defects`` key. ``IssueWorkflow`` uses it behind ``workflow.patched`` so
+    resumed pre-change executions stay deterministic; it is a byte shape, not
+    a new protocol — new sessions use :class:`AgentRunCommand`.
+    """
+
+    issue_id: str
+    repository: str
+    spec_version: int
+    run_key: str
+    branch_name: str
+    base_branch: str
+    objective: str
+    acceptance_criteria: tuple[str, ...]
+    exclusions: tuple[str, ...]
+    constraints: tuple[str, ...]
+    dependencies: tuple[str, ...]
+    workspace_path: str
+
+
+@dataclass(frozen=True)
+class LegacyPublishCommand:
+    """Pre-GEN-52 (H2) shape of the publish input, kept for replay.
+
+    Histories produced before GEN-52 (ADR-0009) scheduled
+    ``publish_pr_activity`` with this input: it serializes without the
+    ``gate_summaries`` key. ``IssueWorkflow`` uses it behind
+    ``workflow.patched`` so resumed pre-change executions stay deterministic;
+    new publications use :class:`PublishCommand`.
+    """
+
+    issue_id: str
+    repository: str
+    run_key: str
+    branch_name: str
+    base_branch: str
+    workspace_path: str
+    objective: str
+    acceptance_criteria: tuple[str, ...]
+    linear_url_template: str
