@@ -108,6 +108,19 @@ class _PassingVerifier:
         )
 
 
+class _ApprovingReviewer:
+    """Simulated independent reviewer that records the command."""
+
+    def __init__(self) -> None:
+        self.commands: list[Any] = []
+
+    async def review(self, command: Any) -> Any:
+        from super_factory.contracts.quality import ReviewOutcome
+
+        self.commands.append(command)
+        return ReviewOutcome(approved=True)
+
+
 class _HubFake:
     """Simulated GitHub: remembers opened PRs by head branch (find_open works)."""
 
@@ -248,9 +261,11 @@ async def test_h2_pipeline_produces_branch_and_pr_without_tokens(harness: Harnes
     )
     agent = _SandboxlessAgent()
     verifier = _PassingVerifier()
+    reviewer = _ApprovingReviewer()
     hub = _HubFake()
     pipeline_activities.set_coding_agent(agent)
     pipeline_activities.set_verification_runner(verifier)
+    pipeline_activities.set_reviewer(reviewer)
     pipeline_activities.set_pull_request_service(hub)
     data = _issue_input(harness.issue_id)
     try:
@@ -286,6 +301,7 @@ async def test_h2_pipeline_produces_branch_and_pr_without_tokens(harness: Harnes
         )
         assert len(agent.commands) == 1
         assert len(verifier.commands) == 1
+        assert len(reviewer.commands) == 1
 
         audit_lines = (tmp_path / "audit.jsonl").read_text(encoding="utf-8").splitlines()
         phases = [json.loads(line)["event_type"] for line in audit_lines]

@@ -116,6 +116,36 @@ async def test_agent_prompt_carries_approved_exclusions_and_constraints() -> Non
     assert "- no new dependencies" in prompt
 
 
+async def test_agent_prompt_carries_repair_defects_via_stdin() -> None:
+    """GEN-52: on repair attempts the stdin payload (not just the workflow
+    command) must carry the gate/review defects so the real session targets
+    them instead of repeating the original implementation prompt."""
+    sandbox = FakeSandboxRuntime()
+    agent = CodexCliAgent(sandbox_runtime=sandbox)
+    await agent.run(
+        _command(
+            defects=(
+                "quality gate tests failed: 1 failed",
+                "DEFECT: missing budget test",
+            )
+        )
+    )
+    prompt = sandbox.commands[0].stdin_payload
+    assert prompt is not None
+    assert "Repair feedback (defects reported by independent verification" in prompt
+    assert "- quality gate tests failed: 1 failed" in prompt
+    assert "- DEFECT: missing budget test" in prompt
+
+
+async def test_agent_prompt_has_no_repair_block_on_first_session() -> None:
+    sandbox = FakeSandboxRuntime()
+    agent = CodexCliAgent(sandbox_runtime=sandbox)
+    await agent.run(_command())
+    prompt = sandbox.commands[0].stdin_payload
+    assert prompt is not None
+    assert "Repair feedback" not in prompt
+
+
 async def test_agent_maps_nonzero_exec_to_failure_and_still_cleans_up() -> None:
     sandbox = FakeSandboxRuntime()
     sandbox.outcome = SandboxCommandOutcome(exit_code=5, output_tail="pytest failed")

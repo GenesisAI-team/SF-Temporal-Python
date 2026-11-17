@@ -125,10 +125,11 @@ class DockerSandboxRuntime:
         ]
         if spec.run_as_non_root:
             argv.extend(("--user", "1000:1000"))
+        mount_mode = ":ro" if spec.workspace_read_only else ""
         argv.extend(
             (
                 "-v",
-                f"{spec.workspace_path}:/workspace",
+                f"{spec.workspace_path}:/workspace{mount_mode}",
                 "-w",
                 "/workspace",
                 spec.image,

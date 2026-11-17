@@ -43,6 +43,12 @@ def test_input_constructs_and_carries_all_fields() -> None:
     assert data.issue_id == "GEN-38"
     assert data.selectable_states == ("Todo", "In Progress")
     assert data.labels == ("Feature",)
+    assert data.max_repair_attempts == 2
+
+
+def test_input_rejects_a_negative_repair_budget() -> None:
+    with pytest.raises(ValueError, match="max_repair_attempts"):
+        IssueWorkflowInput(**_input(max_repair_attempts=-1))
 
 
 def test_result_immutable() -> None:

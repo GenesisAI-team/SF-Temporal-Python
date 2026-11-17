@@ -253,6 +253,8 @@ async def test_accepted_event_starts_unique_run_and_audits(
     assert call.issue_state == "Todo"
     assert call.labels == ("Feature",)
     assert call.selectable_states == ("Todo", "In Progress")
+    assert call.pipeline_enabled is False
+    assert call.max_repair_attempts == 2
     entry = _single_audit_line(tmp_path / "audit.jsonl")
     assert entry["selection_outcome"] == "SELECTED"
     assert entry["workflow_id"] == "issue-GEN-38"

@@ -94,6 +94,18 @@ async def test_ensure_sandbox_can_relax_isolation_and_user() -> None:
     assert "bridge" in argv
 
 
+async def test_ensure_sandbox_can_mount_workspace_read_only() -> None:
+    """GEN-52: review sessions must not be able to alter the artifact that
+    is later published, so the workspace bind can be mounted read-only."""
+    runner = ScriptedRunner()
+    runtime = DockerSandboxRuntime(runner)
+    await runtime.ensure_sandbox(_spec(workspace_read_only=True))
+    argv = list(runner.requests[0].argv)
+    assert "-v" in argv
+    assert "/ws:/workspace:ro" in argv
+    assert "/ws:/workspace" not in argv
+
+
 async def test_ensure_sandbox_maps_runner_failures() -> None:
     runner = ScriptedRunner().on(("docker", "run"), exit_code=125, stderr_tail="nil")
     runtime = DockerSandboxRuntime(runner)

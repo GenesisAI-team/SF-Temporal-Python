@@ -16,6 +16,8 @@ class IssueWorkflowInput:
 
     ``base_branch``/``pipeline_enabled`` carry the H2 PR-production switch:
     with default values the workflow behaves exactly as in H1.
+    ``max_repair_attempts`` bounds the H3 repair loop (GEN-52): the maximum
+    number of repair attempts after the first implementation.
     """
 
     issue_id: str
@@ -30,6 +32,12 @@ class IssueWorkflowInput:
     allowed_repositories: tuple[str, ...]
     base_branch: str = "main"
     pipeline_enabled: bool = False
+    max_repair_attempts: int = 2
+
+    def __post_init__(self) -> None:
+        if self.max_repair_attempts < 0:
+            msg = "max_repair_attempts must be >= 0"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
