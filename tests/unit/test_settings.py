@@ -50,6 +50,48 @@ def test_h1_webhook_settings_defaults() -> None:
     assert settings.audit_log_path == Path("var/audit/events.jsonl")
 
 
+def test_h2_pipeline_settings_defaults() -> None:
+    settings = _clean_settings()
+    assert settings.factory_pipeline_enabled is False
+    assert settings.factory_workspace_root == Path("var/factory/workspaces")
+    assert settings.factory_run_ledger_path == Path("var/audit/runs.jsonl")
+    assert settings.factory_budget_runs_per_issue == 2
+    assert settings.factory_task_spec_path == ""
+    assert settings.factory_sandbox_image == "python:3.12-slim"
+    assert settings.factory_sandbox_cpu == 1.0
+    assert settings.factory_sandbox_memory == "2g"
+    assert settings.factory_sandbox_command_timeout_seconds == 600
+    assert settings.factory_base_branch == "main"
+    assert (
+        settings.factory_linear_issue_url_template
+        == "https://linear.app/genesisnavarra/issue/{issue_id}"
+    )
+
+
+def test_h2_pipeline_settings_env_overrides(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("SF_FACTORY_PIPELINE_ENABLED", "true")
+    monkeypatch.setenv("SF_FACTORY_WORKSPACE_ROOT", "out/ws")
+    monkeypatch.setenv("SF_FACTORY_RUN_LEDGER_PATH", "out/runs.jsonl")
+    monkeypatch.setenv("SF_FACTORY_BUDGET_RUNS_PER_ISSUE", "5")
+    monkeypatch.setenv("SF_FACTORY_TASK_SPEC_PATH", "/env/spec.json")
+    monkeypatch.setenv("SF_FACTORY_SANDBOX_IMAGE", "ghcr.io/genesis/sandbox-codex:0.1")
+    monkeypatch.setenv("SF_FACTORY_SANDBOX_CPU", "2.0")
+    monkeypatch.setenv("SF_FACTORY_SANDBOX_MEMORY", "4g")
+    monkeypatch.setenv("SF_FACTORY_SANDBOX_COMMAND_TIMEOUT_SECONDS", "900")
+    monkeypatch.setenv("SF_FACTORY_BASE_BRANCH", "develop")
+    settings = _clean_settings()
+    assert settings.factory_pipeline_enabled is True
+    assert settings.factory_workspace_root == Path("out/ws")
+    assert settings.factory_run_ledger_path == Path("out/runs.jsonl")
+    assert settings.factory_budget_runs_per_issue == 5
+    assert settings.factory_task_spec_path == "/env/spec.json"
+    assert settings.factory_sandbox_image == "ghcr.io/genesis/sandbox-codex:0.1"
+    assert settings.factory_sandbox_cpu == 2.0
+    assert settings.factory_sandbox_memory == "4g"
+    assert settings.factory_sandbox_command_timeout_seconds == 900
+    assert settings.factory_base_branch == "develop"
+
+
 def test_h1_webhook_settings_env_overrides(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("SF_LINEAR_TARGET_REPOSITORY", "GenesisAI-team/SF-Temporal-Python")
     monkeypatch.setenv("SF_LINEAR_SELECTABLE_STATES", "Todo")

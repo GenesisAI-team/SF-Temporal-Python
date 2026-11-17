@@ -12,7 +12,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class IssueWorkflowInput:
-    """Input of ``IssueWorkflow`` and of the selection activity."""
+    """Input of ``IssueWorkflow`` and of the selection activity.
+
+    ``base_branch``/``pipeline_enabled`` carry the H2 PR-production switch:
+    with default values the workflow behaves exactly as in H1.
+    """
 
     issue_id: str
     repository: str
@@ -24,6 +28,8 @@ class IssueWorkflowInput:
     event_type: str
     selectable_states: tuple[str, ...]
     allowed_repositories: tuple[str, ...]
+    base_branch: str = "main"
+    pipeline_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,12 +42,14 @@ class SelectIssueResult:
 
 @dataclass(frozen=True)
 class IssueWorkflowResult:
-    """Output of ``IssueWorkflow`` (H1 = selection only; agents come in H2)."""
+    """Output of ``IssueWorkflow`` (H1 selection; H2 adds the PR outcome)."""
 
     workflow_state: str
     issue_id: str
     repository: str
     blocking_reasons: tuple[str, ...]
+    pull_request_url: str = ""
+    pull_request_number: int | None = None
 
 
 @dataclass(frozen=True)
