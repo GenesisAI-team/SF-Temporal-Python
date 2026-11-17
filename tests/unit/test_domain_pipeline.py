@@ -120,6 +120,34 @@ def test_agent_prompt_states_sandbox_hard_rules() -> None:
     assert "never push" in prompt.lower()
 
 
+def test_agent_prompt_includes_approved_exclusions_and_constraints() -> None:
+    prompt = build_agent_prompt(
+        objective="Do the thing",
+        acceptance_criteria=("works",),
+        base_branch="main",
+        branch_name="feat/gen-47-thing",
+        exclusions=("do not touch docs/runbooks",),
+        constraints=("keep Python 3.12 compatibility",),
+    )
+    assert "Exclusions (must not be done):" in prompt
+    assert "- do not touch docs/runbooks" in prompt
+    assert "Constraints (must be respected):" in prompt
+    assert "- keep Python 3.12 compatibility" in prompt
+
+
+def test_agent_prompt_omits_scope_sections_when_empty() -> None:
+    prompt = build_agent_prompt(
+        objective="Do the thing",
+        acceptance_criteria=("works",),
+        base_branch="main",
+        branch_name="feat/gen-47-thing",
+        exclusions=(),
+        constraints=(),
+    )
+    assert "Exclusions" not in prompt
+    assert "Constraints" not in prompt
+
+
 def test_pipeline_audit_delivery_id_is_stable_and_composed() -> None:
     built = pipeline_audit_delivery_id("d-1", "GEN-47-v1", "PLANNING")
     assert built == "d-1#GEN-47-v1#PLANNING"

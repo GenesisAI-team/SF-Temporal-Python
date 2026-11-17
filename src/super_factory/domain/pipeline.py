@@ -121,14 +121,37 @@ def pr_body_for(
     return "\n".join(lines)
 
 
+def _bullet_section(title: str, items: tuple[str, ...]) -> str:
+    """Render a titled bullet list, or ``""`` when there is nothing to list."""
+    if not items:
+        return ""
+    lines = "\n".join(f"- {item}" for item in items)
+    return f"{title}:\n{lines}"
+
+
 def build_agent_prompt(
     objective: str,
     acceptance_criteria: tuple[str, ...],
     base_branch: str,
     branch_name: str,
+    exclusions: tuple[str, ...] = (),
+    constraints: tuple[str, ...] = (),
 ) -> str:
-    """Deterministic prompt for the coding agent executed inside the sandbox."""
+    """Deterministic prompt for the coding agent executed inside the sandbox.
+
+    The approved scope travels with the prompt: dropping ``exclusions`` or
+    ``constraints`` would let the agent produce a PR outside the approved
+    specification.
+    """
     criteria_lines = "\n".join(f"- {criterion}" for criterion in acceptance_criteria)
+    scope_block = "".join(
+        f"\n{section}\n"
+        for section in (
+            _bullet_section("Exclusions (must not be done)", exclusions),
+            _bullet_section("Constraints (must be respected)", constraints),
+        )
+        if section
+    )
     return (
         "You are the coding agent of the SF-Temporal-Python Software Factory.\n"
         "Working directory: /workspace (repository mounted read-write).\n"
@@ -140,6 +163,7 @@ def build_agent_prompt(
         "\n"
         "Acceptance criteria:\n"
         f"{criteria_lines}\n"
+        f"{scope_block}"
         "\n"
         "Hard rules:\n"
         "- The sandbox has no network access and receives no credentials.\n"

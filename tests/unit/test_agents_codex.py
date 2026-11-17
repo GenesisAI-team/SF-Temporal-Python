@@ -99,6 +99,23 @@ async def test_agent_transports_prompt_via_stdin_not_argv() -> None:
     assert "no network" in prompt
 
 
+async def test_agent_prompt_carries_approved_exclusions_and_constraints() -> None:
+    sandbox = FakeSandboxRuntime()
+    agent = CodexCliAgent(sandbox_runtime=sandbox)
+    await agent.run(
+        _command(
+            exclusions=("never edit infrastructure/",),
+            constraints=("no new dependencies",),
+        )
+    )
+    prompt = sandbox.commands[0].stdin_payload
+    assert prompt is not None
+    assert "Exclusions (must not be done):" in prompt
+    assert "- never edit infrastructure/" in prompt
+    assert "Constraints (must be respected):" in prompt
+    assert "- no new dependencies" in prompt
+
+
 async def test_agent_maps_nonzero_exec_to_failure_and_still_cleans_up() -> None:
     sandbox = FakeSandboxRuntime()
     sandbox.outcome = SandboxCommandOutcome(exit_code=5, output_tail="pytest failed")

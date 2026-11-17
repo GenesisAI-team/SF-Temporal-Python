@@ -11,7 +11,8 @@ Una issue aprobada (`GEN-N`) con `SF_FACTORY_PIPELINE_ENABLED=true` y una
    `feat/gen-<n>-<slug>` (slug ASCII del título).
 2. `PREPARING`: comprueba el presupuesto (`SF_FACTORY_BUDGET_RUNS_PER_ISSUE`,
    libro en `SF_FACTORY_RUN_LEDGER_PATH`) y garantiza el workspace
-   (`SF_FACTORY_WORKSPACE_ROOT/<run_key>`) con la rama desde
+   (`SF_FACTORY_WORKSPACE_ROOT/<run_key>`, resuelto a ruta absoluta para Git
+   y para el bind-mount de Docker) con la rama desde
    `SF_FACTORY_BASE_BRANCH`.
 3. `IMPLEMENTING`: una sesión `codex exec` dentro de un sandbox Docker
    efímero (`factory-sandbox-<run_key>`), sin red, sin credenciales,
@@ -35,7 +36,11 @@ para reset del operador (la re-ejecución no duplica trabajo).
 - `docker` disponible en el host del worker (versión compatible con el
   compose del repo). Sin docker: `SandboxUnavailable` → reintentos → FAILED.
 - Git disponible y credenciales de push configuradas por el operador para
-  el repositorio objetivo (H2 las gestiona FUERA del sandbox). La
+  el repositorio objetivo (H2 las gestiona FUERA del sandbox). El slug
+  `owner/name` se resuelve a la URL de transporte configurada en
+  `SF_FACTORY_GIT_TRANSPORT_URL_TEMPLATE` (por defecto
+  `https://github.com/{repository}.git`); una URL o ruta local se usa tal
+  cual. La
   identidad de los commits es explicita por entorno
   (`SF_FACTORY_GIT_USER_NAME` / `SF_FACTORY_GIT_USER_EMAIL`; por defecto
   `SF-Temporal-Python Factory <factory@sf-temporal.local>`) — no depende

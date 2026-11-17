@@ -133,6 +133,7 @@ def get_git_workspaces() -> GitWorkspaces:
             SubprocessCommandRunner(),
             user_name=settings.factory_git_user_name,
             user_email=settings.factory_git_user_email,
+            repository_url_template=settings.factory_git_transport_url_template,
         )
     return _git
 
@@ -185,8 +186,13 @@ def get_verification_runner() -> VerificationRunner:
 
 
 def workspace_path_for(run_key: str) -> Path:
-    """Deterministic workspace directory per run key."""
-    return Path(get_settings().factory_workspace_root) / run_key.lower()
+    """Deterministic, absolute workspace directory per run key.
+
+    Git and Docker consume this path, and Docker rejects a relative
+    bind-mount source, so a relative ``factory_workspace_root`` is resolved
+    against the worker's working directory here.
+    """
+    return (Path(get_settings().factory_workspace_root) / run_key.lower()).resolve()
 
 
 @activity.defn(name="plan_run_activity")

@@ -76,6 +76,8 @@ class CodexCliAgent:
             acceptance_criteria=command.acceptance_criteria,
             base_branch=command.base_branch,
             branch_name=command.branch_name,
+            exclusions=command.exclusions,
+            constraints=command.constraints,
         )
         launched = SandboxCommand(
             argv=(self._program, "exec"),

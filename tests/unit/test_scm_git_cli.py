@@ -38,11 +38,72 @@ async def test_ensure_workspace_clones_when_absent(tmp_path: Path) -> None:
     assert status.branch_existed is False
     clone_argv = list(runner.requests[0].argv)
     assert clone_argv[:4] == ["git", "clone", "--branch", "main"]
-    assert clone_argv[-2:] == [REPO, str(path)]
+    assert clone_argv[-2:] == [f"https://github.com/{REPO}.git", str(path)]
     checkout_argv = list(runner.requests[1].argv)
     assert checkout_argv[:3] == ["git", "checkout", "-b"]
     assert "feat/gen-47-h2" in checkout_argv
     assert runner.requests[1].cwd == str(path)
+
+
+async def _clone_source_for(
+    repository: str, path: Path, *, template: str | None = None
+) -> str:
+    runner = ScriptedRunner()
+    adapter = (
+        GitCommandLineRunner(runner)
+        if template is None
+        else GitCommandLineRunner(runner, repository_url_template=template)
+    )
+    status = await adapter.ensure_workspace(
+        repository=repository,
+        base_branch="main",
+        branch_name="feat/gen-47-h2",
+        workspace_path=str(path),
+    )
+    assert status.existed is False
+    return list(runner.requests[0].argv)[-2]
+
+
+async def test_ensure_workspace_resolves_slug_to_https_clone_url(
+    tmp_path: Path,
+) -> None:
+    assert (
+        await _clone_source_for(REPO, tmp_path / "ws")
+        == f"https://github.com/{REPO}.git"
+    )
+
+
+async def test_ensure_workspace_uses_configured_transport_template(
+    tmp_path: Path,
+) -> None:
+    assert (
+        await _clone_source_for(
+            REPO,
+            tmp_path / "ws",
+            template="git@github.com:{repository}.git",
+        )
+        == f"git@github.com:{REPO}.git"
+    )
+
+
+async def test_ensure_workspace_passes_urls_and_local_paths_through(
+    tmp_path: Path,
+) -> None:
+    url = "https://example.com/owner/repo.git"
+    assert await _clone_source_for(url, tmp_path / "u") == url
+    scp = "git@github.com:owner/repo.git"
+    assert await _clone_source_for(scp, tmp_path / "s") == scp
+    local = str(tmp_path / "remote.git")
+    assert await _clone_source_for(local, tmp_path / "l") == local
+    relative = "./fixtures/repo"
+    assert await _clone_source_for(relative, tmp_path / "r") == relative
+
+
+def test_git_runner_rejects_template_without_placeholder() -> None:
+    with pytest.raises(ValueError, match="placeholder"):
+        GitCommandLineRunner(
+            ScriptedRunner(), repository_url_template="https://github.com/fixed"
+        )
 
 
 async def test_ensure_workspace_reuses_existing_checkout_and_branch(tmp_path: Path) -> None:

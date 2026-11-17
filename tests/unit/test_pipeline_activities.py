@@ -210,10 +210,22 @@ def test_prepare_run_creates_ledger_record_and_budget(ports: dict[str, Any]) -> 
     assert preparation.ok
     assert preparation.budget_remaining == 1
     assert "gen-47-v1" in preparation.workspace_path
+    assert Path(preparation.workspace_path).is_absolute()
     assert ports["git"].ensure_calls[0][2] == "feat/gen-47-t"
+    assert Path(ports["git"].ensure_calls[0][3]).is_absolute()
     assert [record.run_key for record in ports["ledger"]._records] == ["GEN-47-v1"]
     record = ports["ledger"]._records[0]
     assert record.outcome == "PREPARED"
+
+
+def test_workspace_path_for_resolves_relative_root_to_absolute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SF_FACTORY_WORKSPACE_ROOT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    resolved = pipeline_activities.workspace_path_for("GEN-47-v1")
+    assert resolved.is_absolute()
+    assert resolved == (tmp_path / "var" / "factory" / "workspaces" / "gen-47-v1").resolve()
 
 
 def test_prepare_run_enforces_budget(ports: dict[str, Any]) -> None:

@@ -15,16 +15,23 @@ covers commit only, not checkout/push/filters, and config whitelisting also
 neutralizes ``core.hooksPath``/``fsmonitor``/aliases defined outside
 ``.git/hooks``.
 
+Repository references (P1 review finding): the pipeline validates
+``repository`` as an ``owner/name`` slug, but ``git clone`` treats a slug as a
+filesystem path. Slugs are resolved to the configured Git transport URL before
+cloning; real URLs, scp-like refs and local paths pass through untouched.
+
 All commands run argv-style via the ``CommandRunner``; runner failures map
 to ``SCMUnavailable`` (retryable). Never force-push.
 """
 
 import contextlib
 import os
+import re
 import shutil
 from pathlib import Path
 
 from super_factory.contracts.scm import CommitInfo, PushInfo, WorkspaceStatus
+from super_factory.domain.repository_spec import is_valid_repository
 from super_factory.process.ports import (
     CommandOutcome,
     CommandRequest,
@@ -34,6 +41,10 @@ from super_factory.process.ports import (
 from super_factory.scm.ports import SCMUnavailable
 
 _COMMAND_TIMEOUT_SECONDS = 120.0
+_DEFAULT_REPOSITORY_URL_TEMPLATE = "https://github.com/{repository}.git"
+_REPOSITORY_PLACEHOLDER = "{repository}"
+_SCP_LIKE_SOURCE = re.compile(r"^[^/\s]+@[^/\s]+:")
+_WINDOWS_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 _SAFE_CORE_KEYS = frozenset(
     {
@@ -152,6 +163,31 @@ def _trusted_config_text(original: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def resolve_clone_source(repository: str, url_template: str) -> str:
+    """Turn an ``owner/name`` slug into the configured Git transport URL.
+
+    ``git clone`` resolves a slug as a local path, never as a GitHub
+    repository, so only a bare slug needs rewriting. A URL, an scp-like ref or
+    a local path is already a usable clone source and passes through.
+    """
+    if _is_clone_source(repository) or not is_valid_repository(repository):
+        return repository
+    return url_template.format(repository=repository)
+
+
+def _is_clone_source(repository: str) -> bool:
+    """Return True when ``repository`` is already something git can clone."""
+    if "://" in repository or _SCP_LIKE_SOURCE.match(repository):
+        return True
+    if repository.endswith(".git"):
+        return True
+    if repository.startswith((".", "~")) or "\\" in repository:
+        return True
+    return Path(repository).is_absolute() or bool(
+        _WINDOWS_DRIVE_PATH.match(repository)
+    )
+
+
 class GitCommandLineRunner:
     """Real ``GitWorkspaces`` on top of the git CLI."""
 
@@ -161,10 +197,18 @@ class GitCommandLineRunner:
         *,
         user_name: str = "SF-Temporal-Python Factory",
         user_email: str = "factory@sf-temporal.local",
+        repository_url_template: str = _DEFAULT_REPOSITORY_URL_TEMPLATE,
     ) -> None:
+        if _REPOSITORY_PLACEHOLDER not in repository_url_template:
+            msg = (
+                "repository URL template must contain the "
+                f"{_REPOSITORY_PLACEHOLDER} placeholder"
+            )
+            raise ValueError(msg)
         self._runner = command_runner
         self._user_name = user_name
         self._user_email = user_email
+        self._repository_url_template = repository_url_template
 
     async def ensure_workspace(
         self, repository: str, base_branch: str, branch_name: str, workspace_path: str
@@ -186,7 +230,10 @@ class GitCommandLineRunner:
             return WorkspaceStatus(
                 path=str(path), existed=True, branch_existed=False
             )
-        clone = await self._git(("clone", "--branch", base_branch, repository, str(path)))
+        clone_source = resolve_clone_source(repository, self._repository_url_template)
+        clone = await self._git(
+            ("clone", "--branch", base_branch, clone_source, str(path))
+        )
         self._ensure_ok(clone, "clone")
         checkout = await self._git(("checkout", "-b", branch_name), str(path))
         self._ensure_ok(checkout, "checkout -b")

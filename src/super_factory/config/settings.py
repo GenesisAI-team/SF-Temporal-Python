@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     factory_base_branch: str = "main"
     factory_git_user_name: str = "SF-Temporal-Python Factory"
     factory_git_user_email: str = "factory@sf-temporal.local"
+    factory_git_transport_url_template: str = "https://github.com/{repository}.git"
     factory_linear_issue_url_template: str = (
         "https://linear.app/genesisnavarra/issue/{issue_id}"
     )
