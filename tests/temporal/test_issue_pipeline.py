@@ -27,6 +27,7 @@ from super_factory.contracts.pipeline import (
     VerificationCommand,
     VerificationOutcome,
 )
+from super_factory.contracts.quality import ReviewCommand, ReviewOutcome
 from super_factory.contracts.scm import PullRequestRef
 from super_factory.contracts.workflow_io import IssueWorkflowInput, IssueWorkflowResult
 from super_factory.persistence.audit import JsonLinesAuditSink
@@ -39,6 +40,7 @@ from super_factory.temporal.activities.pipeline import (
     plan_run_activity,
     prepare_run_activity,
     publish_pr_activity,
+    review_run_activity,
     run_coding_agent_activity,
     verify_run_activity,
 )
@@ -166,8 +168,20 @@ class FakeAgent:
 class FakeVerifier:
     def __init__(self, outcome: Any) -> None:
         self.outcome = outcome
+        self.calls = 0
 
     async def run(self, command: VerificationCommand) -> Any:
+        self.calls += 1
+        return self.outcome
+
+
+class FakeReviewer:
+    def __init__(self, outcome: ReviewOutcome) -> None:
+        self.outcome = outcome
+        self.calls = 0
+
+    async def review(self, command: ReviewCommand) -> Any:
+        self.calls += 1
         return self.outcome
 
 
@@ -189,17 +203,20 @@ def _wire_ports(
     pulls: FakePullRequests | None = None,
     ledger: FakeLedger | None = None,
     spec_source: FakeSpecSource | None = None,
+    reviewer: FakeReviewer | None = None,
 ) -> FakeGitWorkspaces:
     git = git or FakeGitWorkspaces()
     pulls = pulls or FakePullRequests()
     ledger = ledger or FakeLedger()
     spec_source = spec_source or FakeSpecSource()
+    reviewer = reviewer or FakeReviewer(ReviewOutcome(approved=True))
     pipeline_activities.set_task_spec_source(spec_source)
     pipeline_activities.set_git_workspaces(git)
     pipeline_activities.set_pull_request_service(pulls)
     pipeline_activities.set_run_ledger(ledger)
     pipeline_activities.set_coding_agent(agent)
     pipeline_activities.set_verification_runner(verifier)
+    pipeline_activities.set_reviewer(reviewer)
     return git
 
 
@@ -223,6 +240,7 @@ async def _run(env: Any, data: IssueWorkflowInput, workflow_id: str) -> IssueWor
             prepare_run_activity,
             run_coding_agent_activity,
             verify_run_activity,
+            review_run_activity,
             publish_pr_activity,
         ],
     ):
@@ -355,8 +373,14 @@ async def test_pipeline_planning_unavailable_blocks(artifacts: tuple[Any, Any]) 
     assert not any("PREPARING" in event for event in _phases(ledger_path))
 
 
-async def test_pipeline_verification_failure_blocks(artifacts: tuple[Any, Any]) -> None:
-    _, run_ledger = artifacts
+async def test_persistent_gate_failures_block_after_the_repair_budget(
+    artifacts: tuple[Any, Any],
+) -> None:
+    """GEN-52: verification failures no longer block directly; they feed a
+    bounded repair loop. A gate that never passes exhausts the default
+    repair budget (2 attempts) and the workflow blocks with the stable
+    budget reason, without publishing anything."""
+    ledger_path, run_ledger = artifacts
     agent = FakeAgent([AgentRunRecord(completed=True, commands=("codex exec",))])
     verifier = FakeVerifier(
         VerificationOutcome(
@@ -369,9 +393,15 @@ async def test_pipeline_verification_failure_blocks(artifacts: tuple[Any, Any]) 
     async with await WorkflowEnvironment.start_time_skipping() as env:
         result = await _run(env, _input(pipeline_enabled=True), "issue-GEN-47e")
     assert result.workflow_state == "BLOCKED"
-    assert result.blocking_reasons == ("VERIFICATION_FAILED: 1 failed",)
+    assert result.blocking_reasons[0].startswith("REPAIR_BUDGET_EXHAUSTED")
+    assert "VERIFICATION_FAILED: 1 failed" in result.blocking_reasons[0]
+    assert agent.calls == 3
+    assert verifier.calls == 3
     assert pulls.open_calls == 0
     assert git.pushes == []
+    events = _phases(ledger_path)
+    assert events.count("pipeline:REPAIRING:PHASE_OK") == 2
+    assert "pipeline:BLOCKED:PHASE_BLOCKED" in events
 
 
 async def test_existing_pr_is_reused_not_duplicated(artifacts: tuple[Any, Any]) -> None:
@@ -452,6 +482,7 @@ async def _publish_failure_scenario() -> None:
             prepare_run_activity,
             run_coding_agent_activity,
             verify_run_activity,
+            review_run_activity,
             publish_pr_activity,
         ],
     ):
@@ -524,6 +555,7 @@ async def test_pipeline_history_replays_deterministically(
             prepare_run_activity,
             run_coding_agent_activity,
             verify_run_activity,
+            review_run_activity,
             publish_pr_activity,
         ],
     ):

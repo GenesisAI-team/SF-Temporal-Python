@@ -1,4 +1,4 @@
-# Runbook — pipeline H2: de issue aprobada a PR (GEN-47)
+# Runbook — pipeline H2+H3: de issue aprobada a PR (GEN-47/GEN-52)
 
 ## Qué produce
 
@@ -18,18 +18,37 @@ Una issue aprobada (`GEN-N`) con `SF_FACTORY_PIPELINE_ENABLED=true` y una
    efímero (`factory-sandbox-<run_key>`), sin red, sin credenciales,
    rootfs read-only, CPU/RAM acotados, comandos peligrosos bloqueados por
    la deny-list de `domain/safety.py`.
-4. `VERIFYING`: re-ejecución de `uv run pytest -q` en un sandbox nuevo
-   (gate independiente del agente).
-5. `REVIEWING`: `git add -A` + commit convencional + `git push` (nunca
+4. `VERIFYING` (H3): suite de quality gates independientes en un sandbox
+   nuevo — `tests` (`uv run pytest -q`), `lint` (`uv run ruff check .`) y
+   `typecheck` (`uv run mypy src`) — cada gate con su evidencia (colas de
+   salida). Un gate fallido no impide los demás; los pasos de un gate se
+   detienen en su primer fallo.
+5. `REVIEWING` (H3): sesión de revisión independiente (SU PROPIA sandbox,
+   separada del implementador) que contrasta la diff contra la spec
+   aprobada y responde `APPROVED`, `DEFECT: ...` o `SPEC_DRIFT: ...`.
+   `SPEC_DRIFT` bloquea sin reparar; `REVIEW_FAILED` (sin veredicto)
+   bloquea; defectos → repair loop.
+6. `REPAIRING` (H3, acotado): si fallan los gates o la revisión reporta
+   defectos, el agente se re-ejecuta con el feedback (`defects` en el
+   prompt) y el ciclo gates → revisión se repite. Presupuesto:
+   `SF_FACTORY_REPAIR_ATTEMPTS` (2 por defecto; 0 = sin reparación)
+   sobre el mismo run key; límites de tiempo por fase (agente 30 min,
+   gates 15 min, revisión 10 min); un sandbox efímero por sesión (coste).
+   Agotado el presupuesto → `BLOCKED` con `REPAIR_BUDGET_EXHAUSTED` y el
+   último fallo adjunto. Cada intento deja la línea de auditoría
+   `delivery#run_key#REPAIRING#<n>` (los reintentos no duplican).
+7. Publicación: `git add -A` + commit convencional + `git push` (nunca
    force) + apertura/reutilización de PR con `gh` (busca PR abierta por
-   head-branch para no duplicar).
-6. `PR_READY`: memo + línea de auditoría con la URL del PR.
+   head-branch para no duplicar). El cuerpo del PR lleva la evidencia
+   verificada (`## Verified evidence`).
+8. `PR_READY`: memo + línea de auditoría con la URL del PR.
 
 Cada fase deja exactamente una línea en `SF_AUDIT_LOG_PATH` (auditoría
-append-only; los reintentos no duplican). Los fallos funcionales terminan
-en `BLOCKED` con código estable (ver ADR-0008); los fallos técnicos se
-reintentan por política de fase y, agotados, dejan el workflow en FAILED
-para reset del operador (la re-ejecución no duplica trabajo).
+append-only; los reintentos no duplican; las reparaciones, una por
+intento). Los fallos funcionales terminan en `BLOCKED` con código estable
+(ver ADR-0008/0009); los fallos técnicos se reintentan por política de
+fase y, agotados, dejan el workflow en FAILED para reset del operador
+(la re-ejecución no duplica trabajo).
 
 ## Preconditions (GPIO del operador)
 
@@ -91,7 +110,8 @@ con memo `workflow_state` avanzando de PLANNING a PR_READY.
 | Spec aprobada | REAL vía `SF_FACTORY_TASK_SPEC_PATH` (fichero del operador) |
 | Sandbox Docker | Adaptador REAL (docker run/exec/rm vía `CommandRunner`); probado con runner simulado |
 | Agente Codex (sesión real) | ADAPTADOR REAL PENDIENTE DE OPERACIÓN: exige imagen con CLI `codex`; los tests y smokes usan dobles explícitos |
-| Verificación | Adaptador REAL (pytest en sandbox); smoke usa doble explícito |
+| Verificación (gates H3) | Adaptador REAL (suite tests/lint/typecheck en sandbox); smoke usa doble explícito |
+| Revisión independiente (H3) | ADAPTADOR REAL PENDIENTE DE OPERACIÓN: exige imagen con CLI del revisor; sin ella `REVIEW_FAILED` honesto; los tests y smokes usan dobles explícitos |
 | Git commit/push | REAL (`git` CLI); smoke contra bare remote local |
 | GitHub PR | Adaptador REAL (`gh` CLI) probado con runner simulado; el smoke usa doble |
 
@@ -102,6 +122,8 @@ con memo `workflow_state` avanzando de PLANNING a PR_READY.
   superan la vida de la sesión.
 - Presupuesto: `SF_FACTORY_BUDGET_RUNS_PER_ISSUE` (2 por defecto) cuenta
   run keys distintos por issue (ledger persistente); reintentos técnicos
-  del mismo run key no consumen presupuesto.
+  del mismo run key no consumen presupuesto. Las reparaciones H3
+  (`SF_FACTORY_REPAIR_ATTEMPTS`, 2 por defecto) reutilizan el run
+  reservado: no tocan el presupuesto de runs.
 - Logs sin secretos: ni firma/secreto/payload de Linear en líneas de
   auditoría; el sandbox no recibe env heredadas.

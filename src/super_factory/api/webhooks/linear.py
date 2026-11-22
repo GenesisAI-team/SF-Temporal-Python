@@ -217,6 +217,7 @@ async def linear_webhook(
                 allowed_repositories=criteria.allowed_repositories,
                 base_branch=settings.factory_base_branch,
                 pipeline_enabled=settings.factory_pipeline_enabled,
+                max_repair_attempts=settings.factory_repair_attempts,
             )
         )
     except HTTPException:

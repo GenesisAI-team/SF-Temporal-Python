@@ -50,3 +50,14 @@ Los valores están congelados por test (`test_workflow_state_values_are_stable`)
 ## Regla
 
 Nueva frontera de datos = nuevo contrato en `contracts/` + test primero. Los workflows no deben intercambiar dicts ad-hoc.
+
+## Contratos H3 (GEN-52, ADR-0009)
+
+- **`contracts/quality.py`** (dataclasses frozen — plano Temporal):
+  - `GateOutcome` — resultado de un gate independiente (nombre, ok, comandos, evidencia; fallo con `failure_code`/`failure_detail` obligatorios).
+  - `ReviewFinding` — hallazgo del revisor: `kind` (`DEFECT` | `SPEC_DRIFT`) + detalle no vacío.
+  - `ReviewCommand` — lo que juzga el revisor: spec aprobada (objetivo, criterios, exclusiones, constraints), workspace/ramas y resúmenes de gates ya ejecutados.
+  - `ReviewOutcome` — `approved` limpio, o fallo con código validado en cruz: `SPEC_DRIFT` ⟺ `spec_drift` (≥ 1 hallazgo drift), `REVIEW_REJECTED` (hallazgos DEFECT, reparable), `REVIEW_FAILED` (sin veredicto, no reparable).
+- **Extensiones de contratos H2:** `VerificationOutcome.gates` (evidencia por gate), `AgentRunCommand.defects` (feedback de reparación; vacío en la primera sesión), `PublishCommand.gate_summaries` (evidencia verificada al cuerpo del PR), `IssueWorkflowInput.max_repair_attempts` (≥ 0, 2 por defecto).
+- **`domain/quality.py`** — reglas puras: `GateDefinition` + `default_gate_suite()` (tests/lint/typecheck, argv puro), `summarize_gate`, `gate_failure_feedback`, `parse_review_reply`/`reviewer_approved`/`has_spec_drift`/`review_failure_code_for`, `defect_feedback`, `repair_audit_delivery_id` (`delivery#run_key#REPAIRING#<n>`) y `build_reviewer_prompt`. Códigos nuevos de `domain.quality`: `GATE_FAILED`, `SPEC_DRIFT`, `REVIEW_REJECTED`, `REVIEW_FAILED`, `REPAIR_BUDGET_EXHAUSTED`.
+- **Adaptadores:** `verification/quality_gates.py:SandboxQualityGatesRunner` (suite de gates en sandbox; sustituye al runner de un comando de H2) y `review/ports.py:IndependentReviewer` + `review/sandbox.py:SandboxReviewer` (sesión de revisión separada del implementador; parse determinista fail-closed).
